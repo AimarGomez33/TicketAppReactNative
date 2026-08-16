@@ -1,8 +1,8 @@
 // src/components/HeaderBar.tsx
 import React from 'react';
-import { View, TextInput, StyleSheet, Text } from 'react-native';
+import { View, TextInput, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useCartStore } from '../store/useCartStore';
-import { Search, Printer, Wifi } from 'lucide-react-native';
+import { Search, Printer, Wifi, Menu } from 'lucide-react-native';
 
 interface Props {
   searchQuery: string;
@@ -17,38 +17,50 @@ export const HeaderBar: React.FC<Props> = ({
 }) => {
   const tableNumber = useCartStore(state => state.tableNumber);
   const setTableNumber = useCartStore(state => state.setTableNumber);
+  const setActiveTab = useCartStore(state => state.setActiveTab);
 
   return (
     <View style={styles.container}>
-      {/* Fila Superior: Selector de Mesa e Indicadores de Red */}
+      {/* Fila Superior: Título, Selector de Mesa e Indicadores */}
       <View style={styles.topRow}>
-        <View style={styles.tableInputContainer}>
-          <Text style={styles.tableLabel}>Mesa / Orden:</Text>
-          <TextInput
-            style={styles.tableInput}
-            placeholder="Ej. 12 o Llevar"
-            placeholderTextColor="#64748B"
-            value={tableNumber}
-            onChangeText={setTableNumber}
-          />
+        <View style={styles.leftSection}>
+          <TouchableOpacity 
+            style={styles.menuButton} 
+            onPress={() => setActiveTab('tables')}
+          >
+            <Menu size={22} color="#5a3f49" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Nueva Orden</Text>
         </View>
 
-        <View style={styles.statusIcons}>
-          <Wifi size={20} color="#22C55E" />
-          <Printer
-            size={20}
-            color={isPrinterConnected ? '#22C55E' : '#EF4444'}
-          />
+        <View style={styles.rightSection}>
+          {/* Badge de Mesa */}
+          <TouchableOpacity 
+            style={styles.tableBadge}
+            onPress={() => setActiveTab('tables')}
+          >
+            <Text style={styles.tableBadgeText}>
+              {tableNumber ? `MESA ${tableNumber.toUpperCase()}` : 'SIN MESA'}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.statusIcons}>
+            <Wifi size={18} color="#b3006c" />
+            <Printer
+              size={18}
+              color={isPrinterConnected ? '#b3006c' : '#ba1a1a'}
+            />
+          </View>
         </View>
       </View>
 
-      {/* Fila Inferior: Buscador en Tiempo Real (Live Search) */}
+      {/* Fila Inferior: Buscador en Tiempo Real */}
       <View style={styles.searchContainer}>
-        <Search size={18} color="#94A3B8" style={styles.searchIcon} />
+        <Search size={18} color="#ab286c" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Buscar platillo o bebida..."
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor="#5a3f49"
           value={searchQuery}
           onChangeText={onSearchChange}
           clearButtonMode="while-editing"
@@ -60,12 +72,12 @@ export const HeaderBar: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#0B1326',
+    backgroundColor: '#fff8f8', // surface/background general
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 8,
+    paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#3C4A42',
+    borderBottomColor: '#ffe0ea',
   },
   topRow: {
     flexDirection: 'row',
@@ -73,47 +85,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  tableInputContainer: {
+  leftSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#171F33',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    height: 38,
+    gap: 8,
   },
-  tableLabel: {
-    color: '#BBCABF',
-    fontSize: 13,
-    fontWeight: '600',
-    marginRight: 6,
+  menuButton: {
+    padding: 6,
+    borderRadius: 20,
+    backgroundColor: '#ffe8ee',
   },
-  tableInput: {
-    color: '#DAE2FD',
-    fontSize: 14,
+  headerTitle: {
+    color: '#27171d',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tableBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff0f3',
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  tableBadgeText: {
+    color: '#27171d',
+    fontSize: 11,
     fontWeight: 'bold',
-    minWidth: 90,
-    padding: 0,
   },
   statusIcons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#171F33',
-    borderRadius: 6,
+    backgroundColor: '#fff0f3',
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    borderRadius: 20,
     paddingHorizontal: 12,
-    height: 42,
+    height: 40,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 6,
   },
   searchInput: {
     flex: 1,
-    color: '#DAE2FD',
-    fontSize: 14,
+    color: '#27171d',
+    fontSize: 13,
     padding: 0,
+    fontWeight: '500',
   },
 });

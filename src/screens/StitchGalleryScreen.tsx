@@ -1,109 +1,142 @@
-import React, { useState } from 'react';
+// src/screens/StitchGalleryScreen.tsx
+import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { OrderingScreen } from './OrderingScreen';
 import { PaymentScreen } from './PaymentScreen';
 import { TablesScreen } from './TablesScreen';
+import { useCartStore } from '../store/useCartStore';
+import { Table, UtensilsCrossed, CreditCard } from 'lucide-react-native';
 
-type ScreenId = 'ordering' | 'tables' | 'payment';
+type ScreenId = 'tables' | 'ordering' | 'payment';
 
 const labels: Record<ScreenId, string> = {
-  ordering: 'Comandas',
   tables: 'Mesas',
-  payment: 'Pago',
+  ordering: 'Menú',
+  payment: 'Cobro',
 };
 
-interface Props {
-  onOpenPos: () => void;
-}
-
-export function StitchGalleryScreen({ onOpenPos }: Props) {
-  const [selectedScreen, setSelectedScreen] = useState<ScreenId>('ordering');
+export function StitchGalleryScreen() {
+  const selectedScreen = useCartStore(state => state.activeTab);
+  const setSelectedScreen = useCartStore(state => state.setActiveTab);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      {/* Header principal */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.eyebrow}>HIGH-EFFICIENCY RESTAURANT POS</Text>
-          <Text style={styles.title}>Diseños de Stitch</Text>
+          <Text style={styles.eyebrow}>SISTEMA DE PUNTO DE VENTA (POS)</Text>
+          <Text style={styles.title}>Antojitos Margarita</Text>
         </View>
-        <TouchableOpacity style={styles.openButton} onPress={onOpenPos}>
-          <Text style={styles.openButtonText}>ABRIR POS</Text>
-        </TouchableOpacity>
       </View>
 
-      <View style={styles.tabs}>
+      {/* Contenedor del contenido de la pantalla */}
+      <View style={styles.contentContainer}>
+        {selectedScreen === 'tables' && <TablesScreen />}
+        {selectedScreen === 'ordering' && <OrderingScreen />}
+        {selectedScreen === 'payment' && <PaymentScreen />}
+      </View>
+
+      {/* Barra de navegación inferior premium (M3 style) */}
+      <View style={styles.bottomNav}>
         {(Object.keys(labels) as ScreenId[]).map(id => {
           const isSelected = id === selectedScreen;
+
+          const renderIcon = () => {
+            const color = isSelected ? '#ffffff' : '#ab286c';
+            const size = 20;
+            switch (id) {
+              case 'tables':
+                return <Table size={size} color={color} />;
+              case 'ordering':
+                return <UtensilsCrossed size={size} color={color} />;
+              case 'payment':
+                return <CreditCard size={size} color={color} />;
+            }
+          };
+
           return (
             <TouchableOpacity
               key={id}
-              style={[styles.tab, isSelected && styles.activeTab]}
+              style={styles.navItem}
               onPress={() => setSelectedScreen(id)}
+              activeOpacity={0.7}
             >
-              <Text
-                style={[styles.tabText, isSelected && styles.activeTabText]}
-              >
+              <View style={[styles.iconContainer, isSelected && styles.activeIconContainer]}>
+                {renderIcon()}
+              </View>
+              <Text style={[styles.navText, isSelected && styles.activeNavText]}>
                 {labels[id]}
               </Text>
             </TouchableOpacity>
           );
         })}
       </View>
-
-      {selectedScreen === 'ordering' && <OrderingScreen />}
-      {selectedScreen === 'tables' && <TablesScreen />}
-      {selectedScreen === 'payment' && <PaymentScreen />}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#0B1326' },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#fff8f8',
+  },
   header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: '#ffe8ee',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffe0ea',
   },
   eyebrow: {
-    color: '#4EDEA3',
-    fontSize: 10,
+    color: '#5a3f49',
+    fontSize: 9,
     fontWeight: '800',
     letterSpacing: 1.1,
   },
-  title: { color: '#DAE2FD', fontSize: 24, fontWeight: '700', marginTop: 3 },
-  openButton: {
-    backgroundColor: '#10B981',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+  title: {
+    color: '#27171d',
+    fontSize: 22,
+    fontWeight: '800',
+    marginTop: 2,
   },
-  openButtonText: { color: '#003824', fontSize: 11, fontWeight: '800' },
-  tabs: {
-    borderBottomColor: '#3C4A42',
-    borderBottomWidth: 1,
-    borderTopColor: '#3C4A42',
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: 8,
-    padding: 10,
-  },
-  tab: {
-    backgroundColor: '#171F33',
-    borderColor: '#3C4A42',
-    borderRadius: 6,
-    borderWidth: 1,
+  contentContainer: {
     flex: 1,
-    paddingVertical: 10,
+    backgroundColor: '#fff8f8',
   },
-  activeTab: { backgroundColor: '#10B981', borderColor: '#4EDEA3' },
-  tabText: {
-    color: '#BBCABF',
-    fontSize: 12,
+  bottomNav: {
+    flexDirection: 'row',
+    height: 75,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e2bdc9',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingBottom: 4,
+  },
+  navItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  iconContainer: {
+    width: 52,
+    height: 30,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  activeIconContainer: {
+    backgroundColor: '#b3006c', // Color primario rosa del diseño HTML
+  },
+  navText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ab286c',
+  },
+  activeNavText: {
+    color: '#b3006c',
     fontWeight: '700',
-    textAlign: 'center',
   },
-  activeTabText: { color: '#003824' },
 });

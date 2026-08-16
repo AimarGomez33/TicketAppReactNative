@@ -47,34 +47,34 @@ export const CategoryTabs: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: '#0B1326',
-    paddingVertical: 8,
+    backgroundColor: '#fff8f8',
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#3C4A42',
+    borderBottomColor: '#ffe0ea',
   },
   scrollContainer: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     gap: 8,
   },
   tab: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#171F33',
+    backgroundColor: '#ffffff', // surface-container-lowest
     borderWidth: 1,
-    borderColor: '#3C4A42',
+    borderColor: '#ffe0ea',
   },
   activeTab: {
-    backgroundColor: '#10B981',
-    borderColor: '#4EDEA3',
+    backgroundColor: '#ffd9e5', // primary-container (pink light)
+    borderColor: 'transparent',
   },
   tabText: {
-    color: '#BBCABF',
-    fontSize: 13,
+    color: '#27171d', // on-surface
+    fontSize: 12,
     fontWeight: '600',
   },
   activeTabText: {
-    color: '#003824',
-    fontWeight: 'bold',
+    color: '#b3006c', // primary
+    fontWeight: '700',
   },
 });

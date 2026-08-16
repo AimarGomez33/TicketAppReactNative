@@ -2,6 +2,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Product, useCartStore } from '../store/useCartStore';
+import { Plus, Minus } from 'lucide-react-native';
 
 interface Props {
   product: Product;
@@ -15,17 +16,12 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
   const quantity = cartItem ? cartItem.quantity : 0;
 
   return (
-    <TouchableOpacity
-      style={[styles.card, quantity > 0 && styles.activeCard]}
-      onPress={() => addItem(product)}
-      activeOpacity={0.7}
+    <View
+      style={[
+        styles.card,
+        quantity > 0 ? styles.activeCard : styles.inactiveCard,
+      ]}
     >
-      {quantity > 0 && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{quantity}</Text>
-        </View>
-      )}
-
       <Text style={styles.productName} numberOfLines={2}>
         {product.name}
       </Text>
@@ -34,33 +30,36 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
         <Text style={styles.price}>${product.price.toFixed(2)}</Text>
 
         {quantity > 0 ? (
-          <View style={styles.controls}>
+          <View style={styles.qtyContainer}>
             <TouchableOpacity
-              style={styles.btnSmall}
-              onPress={e => {
-                e.stopPropagation();
-                removeItem(product.id);
-              }}
+              style={styles.qtyBtn}
+              onPress={() => removeItem(product.id)}
+              activeOpacity={0.7}
             >
-              <Text style={styles.btnSmallText}>-</Text>
+              <Minus size={14} color="#5a3f49" />
             </TouchableOpacity>
+            
+            <Text style={styles.qtyText}>{quantity}</Text>
+            
             <TouchableOpacity
-              style={styles.btnSmall}
-              onPress={e => {
-                e.stopPropagation();
-                addItem(product);
-              }}
+              style={styles.qtyBtn}
+              onPress={() => addItem(product)}
+              activeOpacity={0.7}
             >
-              <Text style={styles.btnSmallText}>+</Text>
+              <Plus size={14} color="#5a3f49" />
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.plusIcon}>
-            <Text style={styles.plusText}>+</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => addItem(product)}
+            activeOpacity={0.7}
+          >
+            <Plus size={16} color="#b3006c" />
+          </TouchableOpacity>
         )}
       </View>
-    </TouchableOpacity>
+    </View>
   );
 };
 
@@ -68,80 +67,70 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     margin: 6,
-    padding: 14,
-    backgroundColor: '#171F33',
-    borderRadius: 6,
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#3C4A42',
-    justifyContent: 'space-between',
     minHeight: 110,
-    position: 'relative',
+    justifyContent: 'space-between',
+  },
+  inactiveCard: {
+    backgroundColor: '#ffffff', // surface-container-lowest
+    borderColor: '#ffe0ea',
   },
   activeCard: {
-    borderColor: '#4EDEA3',
-    backgroundColor: '#131B2E',
-  },
-  badge: {
-    position: 'absolute',
-    top: -6,
-    right: -6,
-    backgroundColor: '#10B981',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  badgeText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    fontSize: 12,
+    backgroundColor: 'rgba(179, 0, 108, 0.04)', // 4% opacidad del rosa primario
+    borderColor: '#b3006c', // Borde rosa primario
   },
   productName: {
-    color: '#DAE2FD',
-    fontSize: 15,
+    color: '#27171d', // on-surface
+    fontSize: 14,
     fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 8,
   },
   price: {
-    color: '#4EDEA3',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#ab286c', // secondary color
+    fontSize: 13,
+    fontWeight: '700',
   },
-  plusIcon: {
-    backgroundColor: '#2D3449',
-    borderRadius: 8,
+  addBtn: {
+    backgroundColor: '#ffd9e5', // primary-container
     width: 32,
     height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#b3006c',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  plusText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  controls: {
+  qtyContainer: {
     flexDirection: 'row',
-    gap: 6,
+    alignItems: 'center',
+    backgroundColor: '#fff0f3', // surface-container-low
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    borderRadius: 20,
+    height: 32,
+    paddingHorizontal: 2,
   },
-  btnSmall: {
-    backgroundColor: '#10B981',
-    borderRadius: 6,
+  qtyBtn: {
     width: 28,
-    height: 28,
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  btnSmallText: {
-    color: '#FFF',
+  qtyText: {
+    color: '#27171d',
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 12,
+    width: 20,
+    textAlign: 'center',
   },
 });

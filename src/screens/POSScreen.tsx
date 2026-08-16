@@ -41,7 +41,7 @@ export const POSScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+      <StatusBar barStyle="dark-content" backgroundColor="#fff8f8" />
 
       {/* Header Fijo */}
       <HeaderBar
@@ -85,7 +85,7 @@ export const POSScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#fff8f8',
   },
   gridContainer: {
     flex: 1,
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    color: '#64748B',
+    color: '#5a3f49',
     fontSize: 14,
     textAlign: 'center',
   },

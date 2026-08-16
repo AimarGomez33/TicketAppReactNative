@@ -47,11 +47,14 @@ export const generateEscPosBuffer = (
   addText('--------------------------------\n');
 
   addBytes(ESC_POS.ALIGN_LEFT);
-  items.forEach(({ product, quantity }) => {
+  items.forEach(({ product, quantity, notes }) => {
     const itemTotal = (product.price * quantity).toFixed(2);
     addBytes(ESC_POS.TXT_BOLD_ON);
     addText(`${quantity}x ${product.name}\n`);
     addBytes(ESC_POS.TXT_BOLD_OFF);
+    if (notes && notes.trim().length > 0) {
+      addText(`   * NOTA: ${notes.trim()}\n`);
+    }
     addText(`    $${product.price.toFixed(2)} c/u  ->  $${itemTotal}\n`);
   });
 

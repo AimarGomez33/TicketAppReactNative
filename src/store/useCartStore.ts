@@ -11,41 +11,153 @@ export interface Product {
 export interface CartItem {
   product: Product;
   quantity: number;
+  notes?: string; // Modificadores como "sin cebolla", "doble queso"
+}
+
+export type TableStatus = 'free' | 'busy' | 'unpaid' | 'cleaning';
+
+export interface TableOrder {
+  status: TableStatus;
+  cart: Record<string, CartItem>;
+  lastUpdated?: string;
+}
+
+export interface OrderHistoryItem {
+  id: string;
+  tableNumber: string;
+  items: CartItem[];
+  total: number;
+  paymentMethod: 'cash' | 'card' | 'transfer';
+  amountPaid: number;
+  change: number;
+  timestamp: string;
 }
 
 interface CartState {
-  tableNumber: string;
-  cart: Record<string, CartItem>; // Guardado por ID para búsquedas instantáneas O(1)
+  tableNumber: string; // Mesa activa seleccionada
+  cart: Record<string, CartItem>; // Carrito de la mesa activa (para compatibilidad O(1))
+  tables: Record<string, TableOrder>; // Estado de todas las mesas del restaurante
+  ordersHistory: OrderHistoryItem[]; // Historial de pagos
+  
+  activeTab: 'tables' | 'ordering' | 'payment'; // Pantalla/Tab activa global
+  
+  // Acciones
+  setActiveTab: (tab: 'tables' | 'ordering' | 'payment') => void;
   setTableNumber: (table: string) => void;
-  addItem: (product: Product) => void;
+  setTableStatus: (table: string, status: TableStatus) => void;
+  addItem: (product: Product, notes?: string) => void;
   removeItem: (productId: string) => void;
+  updateItemNotes: (productId: string, notes: string) => void;
   clearCart: () => void;
   getTotal: () => number;
   getItemCount: () => number;
+  completePayment: (paymentMethod: 'cash' | 'card' | 'transfer', amountPaid: number, change: number) => void;
+  initializeTables: () => void;
 }
+
+// Inicialización de 12 mesas estándar
+const initialTables = (): Record<string, TableOrder> => {
+  const t: Record<string, TableOrder> = {};
+  for (let i = 1; i <= 12; i++) {
+    t[i.toString()] = { status: 'free', cart: {} };
+  }
+  return t;
+};
 
 export const useCartStore = create<CartState>((set, get) => ({
   tableNumber: '',
   cart: {},
+  tables: initialTables(),
+  ordersHistory: [],
+  activeTab: 'tables',
 
-  // Asignar el número de mesa u orden
-  setTableNumber: (tableNumber) => set({ tableNumber }),
+  setActiveTab: (activeTab) => set({ activeTab }),
 
-  // Agregar +1 unidad de un producto al carrito
-  addItem: (product) =>
+  // Inicializar mesas si es necesario
+  initializeTables: () => {
+    if (Object.keys(get().tables).length === 0) {
+      set({ tables: initialTables() });
+    }
+  },
+
+  // Seleccionar o cambiar mesa activa
+  setTableNumber: (tableNumber) =>
     set((state) => {
-      const existing = state.cart[product.id];
-      const currentQty = existing ? existing.quantity : 0;
+      // 1. Guardar el carrito activo actual en la mesa anterior (si existía)
+      const prevTable = state.tableNumber;
+      const updatedTables = { ...state.tables };
+
+      if (prevTable) {
+        const prevCartCount = Object.keys(state.cart).length;
+        // Si hay items, se marca como busy, si no, se queda en free (o mantiene su estado)
+        const prevStatus = updatedTables[prevTable]?.status || 'free';
+        const newStatus = prevCartCount > 0 ? 'busy' : (prevStatus === 'busy' ? 'free' : prevStatus);
+        
+        updatedTables[prevTable] = {
+          status: newStatus,
+          cart: state.cart,
+          lastUpdated: new Date().toLocaleTimeString(),
+        };
+      }
+
+      // 2. Cargar el carrito de la nueva mesa
+      const nextTableOrder = updatedTables[tableNumber];
+      const nextCart = nextTableOrder ? nextTableOrder.cart : {};
+      
+      // Si la nueva mesa no existe en el mapa (ej. orden manual para llevar), la creamos
+      if (tableNumber && !updatedTables[tableNumber]) {
+        updatedTables[tableNumber] = { status: 'free', cart: {} };
+      }
 
       return {
-        cart: {
-          ...state.cart,
-          [product.id]: { product, quantity: currentQty + 1 },
-        },
+        tableNumber,
+        cart: nextCart,
+        tables: updatedTables,
       };
     }),
 
-  // Restar -1 unidad (si llega a 0, elimina el ítem del carrito)
+  // Cambiar el estado de una mesa manualmente
+  setTableStatus: (table, status) =>
+    set((state) => {
+      const updatedTables = { ...state.tables };
+      if (updatedTables[table]) {
+        updatedTables[table] = {
+          ...updatedTables[table],
+          status,
+        };
+      }
+      return { tables: updatedTables };
+    }),
+
+  // Agregar +1 unidad de un producto a la mesa activa
+  addItem: (product, notes) =>
+    set((state) => {
+      const existing = state.cart[product.id];
+      const currentQty = existing ? existing.quantity : 0;
+      const mergedNotes = notes !== undefined ? notes : (existing?.notes || '');
+
+      const updatedCart = {
+        ...state.cart,
+        [product.id]: { product, quantity: currentQty + 1, notes: mergedNotes },
+      };
+
+      // Sincronizar en el mapa de mesas también
+      const updatedTables = { ...state.tables };
+      if (state.tableNumber) {
+        updatedTables[state.tableNumber] = {
+          status: 'busy',
+          cart: updatedCart,
+          lastUpdated: new Date().toLocaleTimeString(),
+        };
+      }
+
+      return {
+        cart: updatedCart,
+        tables: updatedTables,
+      };
+    }),
+
+  // Restar -1 unidad de un producto de la mesa activa
   removeItem: (productId) =>
     set((state) => {
       const existing = state.cart[productId];
@@ -61,13 +173,66 @@ export const useCartStore = create<CartState>((set, get) => ({
         delete updatedCart[productId];
       }
 
-      return { cart: updatedCart };
+      // Sincronizar en el mapa de mesas también
+      const updatedTables = { ...state.tables };
+      if (state.tableNumber) {
+        const hasItems = Object.keys(updatedCart).length > 0;
+        updatedTables[state.tableNumber] = {
+          status: hasItems ? 'busy' : 'free',
+          cart: updatedCart,
+          lastUpdated: new Date().toLocaleTimeString(),
+        };
+      }
+
+      return {
+        cart: updatedCart,
+        tables: updatedTables,
+      };
     }),
 
-  // Limpiar toda la cuenta actual
-  clearCart: () => set({ cart: {}, tableNumber: '' }),
+  // Actualizar las notas/modificadores de un producto
+  updateItemNotes: (productId, notes) =>
+    set((state) => {
+      const existing = state.cart[productId];
+      if (!existing) return state;
 
-  // Obtener la suma total en pesos ($)
+      const updatedCart = {
+        ...state.cart,
+        [productId]: { ...existing, notes },
+      };
+
+      const updatedTables = { ...state.tables };
+      if (state.tableNumber) {
+        updatedTables[state.tableNumber] = {
+          ...updatedTables[state.tableNumber],
+          cart: updatedCart,
+        };
+      }
+
+      return {
+        cart: updatedCart,
+        tables: updatedTables,
+      };
+    }),
+
+  // Limpiar la mesa activa actual
+  clearCart: () =>
+    set((state) => {
+      const updatedTables = { ...state.tables };
+      if (state.tableNumber) {
+        updatedTables[state.tableNumber] = {
+          status: 'free',
+          cart: {},
+          lastUpdated: new Date().toLocaleTimeString(),
+        };
+      }
+      return {
+        cart: {},
+        tables: updatedTables,
+      };
+    }),
+
+  // Calcular el total monetario del carrito activo
   getTotal: () => {
     const cart = get().cart;
     return Object.values(cart).reduce(
@@ -76,13 +241,47 @@ export const useCartStore = create<CartState>((set, get) => ({
     );
   },
 
-  // Obtener el conteo total de ítems acumulados
+  // Obtener la cantidad de ítems totales del carrito activo
   getItemCount: () => {
     const cart = get().cart;
     return Object.values(cart).reduce((sum, item) => sum + item.quantity, 0);
   },
+
+  // Registrar un pago, archivar la orden y liberar la mesa
+  completePayment: (paymentMethod, amountPaid, change) => {
+    const state = get();
+    const activeTable = state.tableNumber;
+    if (!activeTable) return;
+
+    const activeCart = Object.values(state.cart);
+    if (activeCart.length === 0) return;
+
+    const total = state.getTotal();
+    const newOrder: OrderHistoryItem = {
+      id: Math.random().toString(36).substr(2, 9).toUpperCase(),
+      tableNumber: activeTable,
+      items: activeCart,
+      total,
+      paymentMethod,
+      amountPaid,
+      change,
+      timestamp: new Date().toLocaleString(),
+    };
+
+    set((state) => {
+      const updatedTables = { ...state.tables };
+      updatedTables[activeTable] = {
+        status: 'cleaning', // Cambia a limpieza antes de quedar libre
+        cart: {},
+        lastUpdated: new Date().toLocaleTimeString(),
+      };
+
+      return {
+        cart: {},
+        tables: updatedTables,
+        ordersHistory: [...state.ordersHistory, newOrder],
+        tableNumber: '', // Deseleccionar la mesa
+      };
+    });
+  },
 }));
-
-
-
-
