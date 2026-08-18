@@ -5,42 +5,77 @@ import {
   FlatList,
   StyleSheet,
   Text,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
 import { HeaderBar } from '../components/HeaderBar';
 import { CategoryTabs } from '../components/CategoryTabs';
 import { ProductCard } from '../components/ProductCard';
 import { CartSheet } from '../components/CartSheet';
-import { MOCK_PRODUCTS } from '../data/mockupMenu';
-import { Product } from '../store/useCartStore';
+import { getProductsByMode } from '../data/mockupMenu';
+import { Product, useCartStore } from '../store/useCartStore';
 
 export const POSScreen: React.FC = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('top');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const appMode = useCartStore(state => state.appMode);
 
-  // Filtrado reactivo instantáneo por categoría y live search
+  // Filtrado reactivo instantáneo por categoría, modo de app y live search
   const filteredProducts = useMemo(() => {
-    return MOCK_PRODUCTS.filter((product: Product) => {
-      // Si hay texto de búsqueda, ignora la categoría y busca globalmente
+    const products = getProductsByMode(appMode);
+
+    return products.filter((product: Product) => {
+      // Si hay texto de búsqueda, busca en nombre y descripción
       if (searchQuery.trim().length > 0) {
-        return product.name
-          .toLowerCase()
-          .includes(searchQuery.toLowerCase().trim());
+        const query = searchQuery.toLowerCase().trim();
+        return (
+          product.name.toLowerCase().includes(query) ||
+          (product.description && product.description.toLowerCase().includes(query))
+        );
       }
 
       // Filtro por categoría seleccionada
       if (selectedCategoryId === 'top') {
-        // En "Top Selling" mostramos los platillos más populares (o primeros de la lista)
-        return ['1', '3', '5', '7', '11', '14'].includes(product.id);
+        if (appMode === 'general') {
+          return [
+            'gen-chalupa',
+            'gen-quesadilla',
+            'gen-tostada',
+            'gen-pambazo-adobado',
+            'gen-guajolota',
+            'gen-guajoloyet-adobado',
+            'gen-pozole-grande',
+            'gen-taco',
+            'gen-hamburguesa-especial',
+            'gen-alitas-6',
+            'gen-papas-boneless',
+            'gen-refresco',
+            'gen-agua-500',
+          ].includes(product.id);
+        } else {
+          return [
+            'ant-chalupa',
+            'ques-bistec',
+            'tost-tinga',
+            'esp-guajolota',
+            'esp-guajoloyet-adobado',
+            'poz-grande',
+            'pam-adobado-1',
+            'hamb-especial',
+            'tac-arrachera',
+            'ali-6',
+            'pap-boneless',
+            'beb-refresco',
+            'beb-agua-500',
+          ].includes(product.id);
+        }
       }
 
       return product.category === selectedCategoryId;
     });
-  }, [selectedCategoryId, searchQuery]);
+  }, [appMode, selectedCategoryId, searchQuery]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff8f8" />
 
       {/* Header Fijo */}
@@ -78,7 +113,7 @@ export const POSScreen: React.FC = () => {
 
       {/* Ticket / Carrito Flotante Persistente */}
       <CartSheet />
-    </SafeAreaView>
+    </View>
   );
 };
 

@@ -7,7 +7,8 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { CATEGORIES, Category } from '../data/mockupMenu';
+import { getCategoriesByMode, Category } from '../data/mockupMenu';
+import { useCartStore } from '../store/useCartStore';
 
 interface Props {
   selectedCategoryId: string;
@@ -18,6 +19,9 @@ export const CategoryTabs: React.FC<Props> = ({
   selectedCategoryId,
   onSelectCategory,
 }) => {
+  const appMode = useCartStore(state => state.appMode);
+  const categories = getCategoriesByMode(appMode);
+
   return (
     <View style={styles.wrapper}>
       <ScrollView
@@ -25,7 +29,7 @@ export const CategoryTabs: React.FC<Props> = ({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContainer}
       >
-        {CATEGORIES.map((cat: Category) => {
+        {categories.map((cat: Category) => {
           const isActive = cat.id === selectedCategoryId;
           return (
             <TouchableOpacity

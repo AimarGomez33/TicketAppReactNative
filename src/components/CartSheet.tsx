@@ -11,50 +11,75 @@ import {
   Modal,
 } from 'react-native';
 import { useCartStore } from '../store/useCartStore';
-import { ChevronUp, ChevronDown, Trash2, Printer, Receipt } from 'lucide-react-native';
+import { ChevronUp, Trash2, Printer, Receipt, Tag } from 'lucide-react-native';
 import { printTicketTCP } from '../services/printerService';
+import { QuantityModal } from './QuantityModal';
+import { CartItem } from '../store/useCartStore';
 
 export const CartSheet: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [editingItem, setEditingItem] = useState<CartItem | null>(null);
 
   const cart = useCartStore(state => state.cart);
   const tableNumber = useCartStore(state => state.tableNumber);
   const clearCart = useCartStore(state => state.clearCart);
   const removeItem = useCartStore(state => state.removeItem);
   const addItem = useCartStore(state => state.addItem);
+  const setQuantity = useCartStore(state => state.setQuantity);
   const updateItemNotes = useCartStore(state => state.updateItemNotes);
   const getTotal = useCartStore(state => state.getTotal);
   const getItemCount = useCartStore(state => state.getItemCount);
   const setActiveTab = useCartStore(state => state.setActiveTab);
+  const appMode = useCartStore(state => state.appMode);
+  const includePricesInTicket = useCartStore(state => state.includePricesInTicket);
+  const setIncludePricesInTicket = useCartStore(state => state.setIncludePricesInTicket);
+  const showCustomAlert = useCartStore(state => state.showCustomAlert);
 
   const items = Object.values(cart);
   const itemCount = getItemCount();
-  
-  // En este diseño, el total de productos es el Subtotal, y sumamos el 16% de IVA al final
-  const subtotal = getTotal();
-  const tax = subtotal * 0.16;
-  const total = subtotal + tax;
+
+  // El total es la suma directa de los platillos consumidos
+  const total = getTotal();
 
   const handlePrint = async () => {
     if (itemCount === 0) {
-      Alert.alert('Orden vacía', 'Agrega al menos un platillo a la comanda.');
+      showCustomAlert({
+        type: 'info',
+        title: 'Orden Vacía',
+        message: 'Agrega al menos un platillo a la comanda antes de imprimir.',
+      });
       return;
     }
 
     setIsPrinting(true);
     try {
-      // Imprimir pasándole el total con impuesto
-      await printTicketTCP(tableNumber, items, total);
-      Alert.alert('¡Éxito!', 'Ticket enviado a la impresora.');
-      clearCart();
-      setIsExpanded(false);
+      // Imprimir según la configuración de precios del ticket
+      await printTicketTCP(tableNumber, items, total, {
+        showPrices: includePricesInTicket,
+      });
+
+      showCustomAlert({
+        type: 'printer',
+        title: '¡Ticket Impreso con Éxito!',
+        message: includePricesInTicket
+          ? `El ticket de la Mesa ${tableNumber || 'S/N'} con desglose de precios ($${total.toFixed(2)}) se ha enviado a la impresora.`
+          : `La comanda de cocina para la Mesa ${tableNumber || 'S/N'} (sin precios) se ha impreso correctamente.`,
+        confirmText: 'Aceptar',
+        onConfirm: () => {
+          clearCart();
+          setIsExpanded(false);
+        },
+      });
     } catch (error: any) {
-      Alert.alert(
-        'Error de Impresión',
-        error.message ||
-          'No se pudo conectar con la impresora (192.168.100.200).',
-      );
+      showCustomAlert({
+        type: 'error',
+        title: 'Error de Impresora',
+        message:
+          error.message ||
+          'No se pudo conectar con la impresora térmica (192.168.100.200).',
+        confirmText: 'Entendido',
+      });
     } finally {
       setIsPrinting(false);
     }
@@ -79,7 +104,7 @@ export const CartSheet: React.FC = () => {
           >
             <View>
               <Text style={styles.collapsedCountText}>Total ({itemCount} artículos)</Text>
-              <Text style={styles.collapsedTotalText}>${subtotal.toFixed(2)}</Text>
+              <Text style={styles.collapsedTotalText}>${total.toFixed(2)}</Text>
             </View>
             <ChevronUp size={20} color="#ab286c" style={styles.upArrow} />
           </TouchableOpacity>
@@ -110,8 +135,8 @@ export const CartSheet: React.FC = () => {
           onPress={() => setIsExpanded(false)}
         >
           <View style={styles.sheetWrapper}>
-            <TouchableOpacity 
-              activeOpacity={1} 
+            <TouchableOpacity
+              activeOpacity={1}
               style={styles.sheetContainer}
               onPress={(e) => e.stopPropagation()} // Evita cerrar al tocar contenido
             >
@@ -130,58 +155,85 @@ export const CartSheet: React.FC = () => {
 
               {/* Lista de productos scrollable */}
               <ScrollView style={styles.itemList} contentContainerStyle={styles.itemListContent} nestedScrollEnabled>
-                {items.map(({ product, quantity, notes }) => (
-                  <View key={product.id} style={styles.itemRow}>
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName}>{product.name}</Text>
-                      <Text style={styles.itemUnitText}>${product.price.toFixed(2)} / c/u</Text>
-                      
-                      <TextInput
-                        style={styles.notesInput}
-                        placeholder="Notas (ej: sin cebolla)..."
-                        placeholderTextColor="#8e6e79"
-                        value={notes || ''}
-                        onChangeText={(text) => updateItemNotes(product.id, text)}
-                      />
-                    </View>
+                {items.map((item) => {
+                  const { product, quantity, notes } = item;
+                  return (
+                    <View key={product.id} style={styles.itemRow}>
+                      <TouchableOpacity
+                        style={styles.itemInfo}
+                        onPress={() => setEditingItem(item)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.itemName}>{product.name}</Text>
+                        <Text style={styles.itemUnitText}>
+                          ${product.price.toFixed(2)} c/u {notes ? `• 📝 ${notes}` : ''}
+                        </Text>
+                      </TouchableOpacity>
 
-                    <View style={styles.rightControls}>
-                      <View style={styles.qtyContainer}>
-                        <TouchableOpacity
-                          style={styles.qtyBtn}
-                          onPress={() => removeItem(product.id)}
-                        >
-                          <Text style={styles.qtyBtnText}>-</Text>
-                        </TouchableOpacity>
-                        <Text style={styles.qtyText}>{quantity}</Text>
-                        <TouchableOpacity
-                          style={styles.qtyBtn}
-                          onPress={() => addItem(product)}
-                        >
-                          <Text style={styles.qtyBtnText}>+</Text>
-                        </TouchableOpacity>
+                      <View style={styles.rightControls}>
+                        <View style={styles.qtyContainer}>
+                          <TouchableOpacity
+                            style={styles.qtyBtn}
+                            onPress={() => removeItem(product.id)}
+                          >
+                            <Text style={styles.qtyBtnText}>-</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            onPress={() => setEditingItem(item)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.qtyText}>{quantity}</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.qtyBtn}
+                            onPress={() => addItem(product)}
+                          >
+                            <Text style={styles.qtyBtnText}>+</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.itemSubtotalText}>
+                          ${(product.price * quantity).toFixed(2)}
+                        </Text>
                       </View>
-                      
-                      <Text style={styles.itemSubtotalText}>
-                        ${(product.price * quantity).toFixed(2)}
-                      </Text>
                     </View>
-                  </View>
-                ))}
+                  );
+                })}
               </ScrollView>
 
               {/* Resumen de totales y acciones finales */}
               <View style={styles.footerContainer}>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Subtotal</Text>
-                  <Text style={styles.summaryValue}>${subtotal.toFixed(2)}</Text>
+                {/* Selector / Indicador de Ticket con o sin Precios */}
+                <View style={styles.ticketConfigRow}>
+                  <View style={styles.ticketConfigInfo}>
+                    <Tag size={14} color="#b3006c" />
+                    <Text style={styles.ticketConfigLabel}>
+                      Ticket: {includePricesInTicket ? 'Con Precios' : 'Sin Precios (Comanda)'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.ticketConfigToggle,
+                      includePricesInTicket && styles.ticketConfigToggleActive,
+                    ]}
+                    onPress={() => setIncludePricesInTicket(!includePricesInTicket)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.ticketConfigToggleText,
+                        includePricesInTicket && styles.ticketConfigToggleTextActive,
+                      ]}
+                    >
+                      {includePricesInTicket ? 'Precios: SÍ' : 'Precios: NO'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>IVA (16%)</Text>
-                  <Text style={styles.summaryValue}>${tax.toFixed(2)}</Text>
-                </View>
+
                 <View style={[styles.summaryRow, styles.totalRow]}>
-                  <Text style={styles.totalLabel}>Total</Text>
+                  <Text style={styles.totalLabel}>TOTAL A PAGAR</Text>
                   <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
                 </View>
 
@@ -200,7 +252,7 @@ export const CartSheet: React.FC = () => {
                     onPress={handleGoToPayment}
                     disabled={isPrinting}
                   >
-                    <Receipt size={18} color="#FFF" style={{ marginRight: 6 }} />
+                    <Receipt size={18} color="#FFF" style={styles.btnIconMargin} />
                     <Text style={styles.checkoutBtnText}>COBRAR CUENTA</Text>
                   </TouchableOpacity>
                 </View>
@@ -210,9 +262,13 @@ export const CartSheet: React.FC = () => {
                   onPress={handlePrint}
                   disabled={isPrinting}
                 >
-                  <Printer size={18} color="#FFF" style={{ marginRight: 6 }} />
+                  <Printer size={18} color="#FFF" style={styles.btnIconMargin} />
                   <Text style={styles.kitchenPrintBtnText}>
-                    {isPrinting ? 'ENVIANDO A COCINA...' : 'ENVIAR Y IMPRIMIR TICKET'}
+                    {isPrinting
+                      ? 'ENVIANDO A IMPRESORA...'
+                      : includePricesInTicket
+                      ? 'IMPRIMIR TICKET CON PRECIOS'
+                      : 'IMPRIMIR COMANDA (SIN PRECIOS)'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -220,6 +276,21 @@ export const CartSheet: React.FC = () => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Modal de edición rápida de cantidad desde el Carrito */}
+      {editingItem && (
+        <QuantityModal
+          visible={!!editingItem}
+          product={editingItem.product}
+          currentQuantity={editingItem.quantity}
+          currentNotes={editingItem.notes}
+          onClose={() => setEditingItem(null)}
+          onConfirm={(newQty, newNotes) => {
+            setQuantity(editingItem.product, newQty, newNotes);
+            setEditingItem(null);
+          }}
+        />
+      )}
     </>
   );
 };
@@ -227,7 +298,7 @@ export const CartSheet: React.FC = () => {
 const styles = StyleSheet.create({
   collapsedBar: {
     position: 'absolute',
-    bottom: 75, // Justo sobre la barra de navegación inferior
+    bottom: 72, // Justo sobre la barra de navegación inferior
     left: 0,
     right: 0,
     backgroundColor: '#ffffff', // surface-container-lowest
@@ -501,5 +572,50 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  btnIconMargin: {
+    marginRight: 6,
+  },
+  ticketConfigRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff0f3',
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  ticketConfigInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ticketConfigLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#27171d',
+  },
+  ticketConfigToggle: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  ticketConfigToggleActive: {
+    backgroundColor: '#b3006c',
+    borderColor: '#b3006c',
+  },
+  ticketConfigToggleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#5a3f49',
+  },
+  ticketConfigToggleTextActive: {
+    color: '#ffffff',
   },
 });

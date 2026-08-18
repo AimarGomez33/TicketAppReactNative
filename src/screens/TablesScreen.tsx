@@ -13,7 +13,6 @@ import { useCartStore, TableStatus } from '../store/useCartStore';
 import {
   Clock,
   Coffee,
-  CheckCircle,
   ShoppingBag,
   CreditCard,
 } from 'lucide-react-native';
@@ -25,31 +24,43 @@ const STATUS_LABELS: Record<TableStatus, string> = {
   cleaning: 'Limpieza',
 };
 
-const STATUS_COLORS: Record<TableStatus, { bg: string; border: string; text: string; dot: string }> = {
-  free: {
-    bg: '#ffffff', // blanco
-    border: '#ffe0ea', // rosa suave
-    text: '#5a3f49', // rosa oscuro
-    dot: '#10B981', // verde
-  },
-  busy: {
-    bg: '#fff0f3', // rosa muy claro
-    border: '#b3006c', // rosa primario
-    text: '#b3006c',
-    dot: '#EAB308', // amarillo
-  },
-  unpaid: {
-    bg: '#ffd9e5', // rosa contenedor
-    border: '#ba1a1a', // error/red
-    text: '#ba1a1a',
-    dot: '#ba1a1a',
-  },
-  cleaning: {
-    bg: '#fff8f8', // fondo
-    border: '#3B82F6', // azul
-    text: '#3B82F6',
-    dot: '#3B82F6',
-  },
+const getCardStatusStyle = (status: TableStatus) => {
+  switch (status) {
+    case 'free':
+      return styles.cardStatus_free;
+    case 'busy':
+      return styles.cardStatus_busy;
+    case 'unpaid':
+      return styles.cardStatus_unpaid;
+    case 'cleaning':
+      return styles.cardStatus_cleaning;
+  }
+};
+
+const getDotStatusStyle = (status: TableStatus) => {
+  switch (status) {
+    case 'free':
+      return styles.dotStatus_free;
+    case 'busy':
+      return styles.dotStatus_busy;
+    case 'unpaid':
+      return styles.dotStatus_unpaid;
+    case 'cleaning':
+      return styles.dotStatus_cleaning;
+  }
+};
+
+const getSubtitleStatusStyle = (status: TableStatus) => {
+  switch (status) {
+    case 'free':
+      return styles.detailsSubtitle_free;
+    case 'busy':
+      return styles.detailsSubtitle_busy;
+    case 'unpaid':
+      return styles.detailsSubtitle_unpaid;
+    case 'cleaning':
+      return styles.detailsSubtitle_cleaning;
+  }
 };
 
 export function TablesScreen() {
@@ -58,6 +69,7 @@ export function TablesScreen() {
   const setTableStatus = useCartStore(state => state.setTableStatus);
   const setActiveTab = useCartStore(state => state.setActiveTab);
   const clearCart = useCartStore(state => state.clearCart);
+  const showCustomAlert = useCartStore(state => state.showCustomAlert);
 
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
 
@@ -75,10 +87,12 @@ export function TablesScreen() {
     const hasItems = tableOrder && Object.keys(tableOrder.cart).length > 0;
 
     if (!hasItems) {
-      Alert.alert(
-        'Mesa sin consumo',
-        'No puedes cobrar una mesa que no tiene platillos registrados.'
-      );
+      showCustomAlert({
+        type: 'info',
+        title: 'Mesa Sin Consumo',
+        message: 'No puedes cobrar una mesa que aún no tiene platillos registrados.',
+        confirmText: 'Entendido',
+      });
       return;
     }
 
@@ -87,23 +101,19 @@ export function TablesScreen() {
   };
 
   const handleClearTable = (tableId: string) => {
-    Alert.alert(
-      'Liberar Mesa',
-      `¿Estás seguro de que deseas liberar la Mesa ${tableId}? Esto borrará su cuenta actual.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Liberar',
-          style: 'destructive',
-          onPress: () => {
-            setTableNumber(tableId);
-            clearCart();
-            setTableNumber('');
-            setSelectedTable(null);
-          },
-        },
-      ]
-    );
+    showCustomAlert({
+      type: 'error',
+      title: `¿Liberar Mesa ${tableId}?`,
+      message: `Esto borrará la comanda activa de la Mesa ${tableId} y la marcará como disponible.`,
+      confirmText: 'Sí, Liberar',
+      cancelText: 'Cancelar',
+      onConfirm: () => {
+        setTableNumber(tableId);
+        clearCart();
+        setTableNumber('');
+        setSelectedTable(null);
+      },
+    });
   };
 
   const handleToggleStatus = (tableId: string) => {
@@ -122,7 +132,6 @@ export function TablesScreen() {
     const tableOrder = tables[tableId];
     const status = tableOrder?.status || 'free';
     const cartItems = tableOrder?.cart ? Object.values(tableOrder.cart) : [];
-    const colors = STATUS_COLORS[status];
     const isSelected = selectedTable === tableId;
 
     const total = cartItems.reduce(
@@ -135,7 +144,7 @@ export function TablesScreen() {
       <TouchableOpacity
         style={[
           styles.tableCard,
-          { backgroundColor: colors.bg, borderColor: isSelected ? '#b3006c' : colors.border },
+          getCardStatusStyle(status),
           isSelected && styles.selectedCard,
         ]}
         onPress={() => handleSelectTable(tableId)}
@@ -143,7 +152,7 @@ export function TablesScreen() {
       >
         <View style={styles.cardHeader}>
           <Text style={styles.tableName}>Mesa {tableId}</Text>
-          <View style={[styles.statusDot, { backgroundColor: colors.dot }]} />
+          <View style={[styles.statusDot, getDotStatusStyle(status)]} />
         </View>
 
         <View style={styles.cardBody}>
@@ -164,7 +173,7 @@ export function TablesScreen() {
           )}
           {status === 'cleaning' && (
             <View style={styles.cleaningRow}>
-              <Clock size={12} color="#3B82F6" style={{ marginRight: 4 }} />
+              <Clock size={12} color="#3B82F6" style={styles.cleaningIcon} />
               <Text style={styles.cleaningText}>Sucia</Text>
             </View>
           )}
@@ -192,7 +201,7 @@ export function TablesScreen() {
         <View style={styles.detailsHeader}>
           <View>
             <Text style={styles.detailsTitle}>Mesa {selectedTable}</Text>
-            <Text style={[styles.detailsSubtitle, { color: STATUS_COLORS[status].dot }]}>
+            <Text style={[styles.detailsSubtitle, getSubtitleStatusStyle(status)]}>
               Estado: {STATUS_LABELS[status]}
             </Text>
           </View>
@@ -226,7 +235,7 @@ export function TablesScreen() {
             style={[styles.actionBtn, styles.orderBtn]}
             onPress={() => handleGoToOrder(selectedTable)}
           >
-            <Coffee size={16} color="#FFF" style={{ marginRight: 6 }} />
+            <Coffee size={16} color="#FFF" style={styles.actionBtnIcon} />
             <Text style={styles.orderBtnText}>TOMA COMANDA</Text>
           </TouchableOpacity>
 
@@ -235,7 +244,7 @@ export function TablesScreen() {
               style={[styles.actionBtn, styles.payBtn]}
               onPress={() => handleGoToPayment(selectedTable)}
             >
-              <CreditCard size={16} color="#FFF" style={{ marginRight: 6 }} />
+              <CreditCard size={16} color="#FFF" style={styles.actionBtnIcon} />
               <Text style={styles.payBtnText}>COBRAR CUENTA</Text>
             </TouchableOpacity>
           )}
@@ -267,19 +276,19 @@ export function TablesScreen() {
       {/* Indicadores de Leyenda */}
       <View style={styles.legendContainer}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+          <View style={[styles.legendDot, styles.dotStatus_free]} />
           <Text style={styles.legendText}>Libre</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#EAB308' }]} />
+          <View style={[styles.legendDot, styles.dotStatus_busy]} />
           <Text style={styles.legendText}>Consumo</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+          <View style={[styles.legendDot, styles.dotStatus_unpaid]} />
           <Text style={styles.legendText}>Por Cobrar</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#3B82F6' }]} />
+          <View style={[styles.legendDot, styles.dotStatus_cleaning]} />
           <Text style={styles.legendText}>Limpieza</Text>
         </View>
       </View>
@@ -289,7 +298,7 @@ export function TablesScreen() {
         style={styles.quickOrderBtn}
         onPress={() => handleGoToOrder('Llevar')}
       >
-        <ShoppingBag size={18} color="#b3006c" style={{ marginRight: 8 }} />
+        <ShoppingBag size={18} color="#b3006c" style={styles.quickOrderIcon} />
         <Text style={styles.quickOrderText}>Orden Rápida (Para Llevar)</Text>
       </TouchableOpacity>
 
@@ -550,5 +559,54 @@ const styles = StyleSheet.create({
     color: '#ba1a1a',
     fontSize: 12,
     fontWeight: '600',
+  },
+  cardStatus_free: {
+    backgroundColor: '#ffffff',
+    borderColor: '#ffe0ea',
+  },
+  cardStatus_busy: {
+    backgroundColor: '#fff0f3',
+    borderColor: '#b3006c',
+  },
+  cardStatus_unpaid: {
+    backgroundColor: '#ffd9e5',
+    borderColor: '#ba1a1a',
+  },
+  cardStatus_cleaning: {
+    backgroundColor: '#fff8f8',
+    borderColor: '#3B82F6',
+  },
+  dotStatus_free: {
+    backgroundColor: '#10B981',
+  },
+  dotStatus_busy: {
+    backgroundColor: '#EAB308',
+  },
+  dotStatus_unpaid: {
+    backgroundColor: '#EF4444',
+  },
+  dotStatus_cleaning: {
+    backgroundColor: '#3B82F6',
+  },
+  detailsSubtitle_free: {
+    color: '#10B981',
+  },
+  detailsSubtitle_busy: {
+    color: '#EAB308',
+  },
+  detailsSubtitle_unpaid: {
+    color: '#ba1a1a',
+  },
+  detailsSubtitle_cleaning: {
+    color: '#3B82F6',
+  },
+  cleaningIcon: {
+    marginRight: 4,
+  },
+  actionBtnIcon: {
+    marginRight: 6,
+  },
+  quickOrderIcon: {
+    marginRight: 8,
   },
 });

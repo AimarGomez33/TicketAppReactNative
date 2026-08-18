@@ -16,6 +16,7 @@ import {
   Printer,
   ChevronLeft,
   XCircle,
+  Tag,
 } from 'lucide-react-native';
 import { printTicketTCP } from '../services/printerService';
 
@@ -24,21 +25,22 @@ type PaymentMethod = 'cash' | 'card' | 'transfer';
 export function PaymentScreen() {
   const tableNumber = useCartStore(state => state.tableNumber);
   const cart = useCartStore(state => state.cart);
-  
+
   // Zustand actions
   const getTotal = useCartStore(state => state.getTotal);
   const completePayment = useCartStore(state => state.completePayment);
   const setActiveTab = useCartStore(state => state.setActiveTab);
+  const includePricesInTicket = useCartStore(state => state.includePricesInTicket);
+  const setIncludePricesInTicket = useCartStore(state => state.setIncludePricesInTicket);
+  const showCustomAlert = useCartStore(state => state.showCustomAlert);
 
   // Local state
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [receivedCashStr, setReceivedCashStr] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // En el nuevo flujo de cobro, calculamos IVA 16% sobre el consumo base
-  const subtotal = getTotal();
-  const tax = subtotal * 0.16;
-  const total = subtotal + tax;
+  // El total a cobrar es la suma directa de los consumos
+  const total = getTotal();
 
   const items = Object.values(cart);
 
@@ -101,34 +103,42 @@ export function PaymentScreen() {
 
   const handleProcessPayment = async () => {
     if (paymentMethod === 'cash' && !isAmountSufficient) {
-      Alert.alert(
-        'Monto insuficiente',
-        `El dinero recibido ($${receivedCash.toFixed(2)}) es menor que el total ($${total.toFixed(2)}).`
-      );
+      showCustomAlert({
+        type: 'error',
+        title: 'Monto Insuficiente',
+        message: `El dinero recibido ($${receivedCash.toFixed(2)}) es menor que el total ($${total.toFixed(2)}).`,
+        confirmText: 'Entendido',
+      });
       return;
     }
 
     setIsProcessing(true);
     try {
-      await printTicketTCP(tableNumber, items, total);
+      await printTicketTCP(tableNumber, items, total, {
+        showPrices: includePricesInTicket,
+      });
       completePayment(paymentMethod, receivedCash, change);
-      Alert.alert('Pago Exitoso', 'La cuenta ha sido cerrada y el ticket impreso.');
-      setActiveTab('tables');
+      showCustomAlert({
+        type: 'printer',
+        title: '¡Pago Exitoso!',
+        message: `La cuenta de la Mesa ${tableNumber} se ha cerrado y el ticket ha sido impreso correctamente.`,
+        confirmText: 'Volver a Mesas',
+        onConfirm: () => {
+          setActiveTab('tables');
+        },
+      });
     } catch (error: any) {
-      Alert.alert(
-        'Pago procesado con error de impresión',
-        `La cuenta se cerrará localmente, pero no se pudo imprimir el ticket: ${error.message || 'Error de impresora'}.`,
-        [
-          {
-            text: 'Cerrar Cuenta sin Imprimir',
-            onPress: () => {
-              completePayment(paymentMethod, receivedCash, change);
-              setActiveTab('tables');
-            },
-          },
-          { text: 'Cancelar', style: 'cancel' },
-        ]
-      );
+      showCustomAlert({
+        type: 'error',
+        title: 'Error de Impresora',
+        message: `No se pudo conectar con la impresora térmica (${error.message || '192.168.100.200'}). ¿Deseas cerrar la cuenta sin ticket físico?`,
+        confirmText: 'Cerrar sin Imprimir',
+        cancelText: 'Cancelar',
+        onConfirm: () => {
+          completePayment(paymentMethod, receivedCash, change);
+          setActiveTab('tables');
+        },
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -155,7 +165,7 @@ export function PaymentScreen() {
           <View style={styles.itemsList}>
             {items.map(({ product, quantity, notes }) => (
               <View key={product.id} style={styles.itemRow}>
-                <View style={{ flex: 1 }}>
+                <View style={styles.itemInfo}>
                   <Text style={styles.itemName}>
                     {quantity}x {product.name}
                   </Text>
@@ -169,17 +179,36 @@ export function PaymentScreen() {
               </View>
             ))}
           </View>
-          <View style={styles.subtotalRow}>
-            <Text style={styles.subtotalLabel}>Subtotal</Text>
-            <Text style={styles.subtotalValue}>${subtotal.toFixed(2)}</Text>
-          </View>
-          <View style={styles.subtotalRow}>
-            <Text style={styles.subtotalLabel}>IVA (16%)</Text>
-            <Text style={styles.subtotalValue}>${tax.toFixed(2)}</Text>
-          </View>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>TOTAL A COBRAR</Text>
             <Text style={styles.totalAmount}>${total.toFixed(2)}</Text>
+          </View>
+
+          {/* Opción de Precios en Ticket */}
+          <View style={styles.ticketConfigRow}>
+            <View style={styles.ticketConfigInfo}>
+              <Tag size={14} color="#b3006c" />
+              <Text style={styles.ticketConfigLabel}>
+                Ticket: {includePricesInTicket ? 'Con Precios' : 'Sin Precios'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.ticketConfigToggle,
+                includePricesInTicket && styles.ticketConfigToggleActive,
+              ]}
+              onPress={() => setIncludePricesInTicket(!includePricesInTicket)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.ticketConfigToggleText,
+                  includePricesInTicket && styles.ticketConfigToggleTextActive,
+                ]}
+              >
+                {includePricesInTicket ? 'Precios: SÍ' : 'Precios: NO'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -265,7 +294,7 @@ export function PaymentScreen() {
                 <Text
                   style={[
                     styles.cashSumValue,
-                    { color: isAmountSufficient ? '#10B981' : '#8e6e79' },
+                    isAmountSufficient ? styles.cashSumValueSufficient : styles.cashSumValueInsufficient,
                   ]}
                 >
                   ${change.toFixed(2)}
@@ -370,7 +399,7 @@ export function PaymentScreen() {
           onPress={handleProcessPayment}
           disabled={(!isAmountSufficient && paymentMethod === 'cash') || isProcessing}
         >
-          <Printer size={18} color="#FFF" style={{ marginRight: 8 }} />
+          <Printer size={18} color="#FFF" style={styles.processBtnIcon} />
           <Text style={styles.processBtnText}>
             {isProcessing ? 'PROCESANDO...' : 'CERRAR Y ENVIAR TICKET'}
           </Text>
@@ -677,6 +706,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  processBtnIcon: {
+    marginRight: 8,
+  },
   processBtnDisabled: {
     backgroundColor: '#8e6e79',
     opacity: 0.6,
@@ -686,5 +718,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     letterSpacing: 0.5,
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  cashSumValueSufficient: {
+    color: '#10B981',
+  },
+  cashSumValueInsufficient: {
+    color: '#8e6e79',
+  },
+  ticketConfigRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff0f3',
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 12,
+  },
+  ticketConfigInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ticketConfigLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#27171d',
+  },
+  ticketConfigToggle: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  ticketConfigToggleActive: {
+    backgroundColor: '#b3006c',
+    borderColor: '#b3006c',
+  },
+  ticketConfigToggleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#5a3f49',
+  },
+  ticketConfigToggleTextActive: {
+    color: '#ffffff',
   },
 });

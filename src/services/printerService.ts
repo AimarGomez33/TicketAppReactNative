@@ -20,11 +20,18 @@ const ESC_POS = {
   CUT_PAPER: [0x1d, 0x56, 0x42, 0x00],
 };
 
+export interface PrintOptions {
+  showPrices?: boolean;
+  title?: string;
+}
+
 export const generateEscPosBuffer = (
   tableNumber: string,
   items: CartItem[],
   total: number,
+  options?: PrintOptions,
 ): Uint8Array => {
+  const showPrices = options?.showPrices ?? true;
   const bytes: number[] = [];
 
   const addBytes = (arr: number[]) => bytes.push(...arr);
@@ -39,34 +46,55 @@ export const generateEscPosBuffer = (
   addBytes(ESC_POS.ALIGN_CENTER);
   addBytes(ESC_POS.TXT_BOLD_ON);
   addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
-  addText('ANTOJITOS MARGARITA\n');
+  addText('ANTOJITOS MEXICANOS MARGARITA\n');
   addBytes(ESC_POS.TXT_NORMAL);
   addBytes(ESC_POS.TXT_BOLD_OFF);
+
+  if (!showPrices) {
+    addBytes(ESC_POS.TXT_BOLD_ON);
+    addText('*** COMANDA DE COCINA ***\n');
+    addBytes(ESC_POS.TXT_BOLD_OFF);
+  }
+
   addText(`Mesa: ${tableNumber || 'S/N'}\n`);
   addText(`Fecha: ${new Date().toLocaleString()}\n`);
   addText('--------------------------------\n');
 
   addBytes(ESC_POS.ALIGN_LEFT);
-  items.forEach(({ product, quantity, notes }) => {
-    const itemTotal = (product.price * quantity).toFixed(2);
+  items.forEach(({ product, quantity, notes }, index) => {
     addBytes(ESC_POS.TXT_BOLD_ON);
     addText(`${quantity}x ${product.name}\n`);
     addBytes(ESC_POS.TXT_BOLD_OFF);
     if (notes && notes.trim().length > 0) {
       addText(`   * NOTA: ${notes.trim()}\n`);
     }
-    addText(`    $${product.price.toFixed(2)} c/u  ->  $${itemTotal}\n`);
+    if (showPrices) {
+      const itemTotal = (product.price * quantity).toFixed(2);
+      addText(`    $${product.price.toFixed(2)} c/u  ->  $${itemTotal}\n`);
+    } else {
+      // Salto de línea entre cada platillo para facilitar la lectura en cocina
+      addText('\n');
+    }
   });
 
   addBytes(ESC_POS.ALIGN_CENTER);
   addText('--------------------------------\n');
-  addBytes(ESC_POS.TXT_BOLD_ON);
-  addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
-  addText(`TOTAL: $${total.toFixed(2)}\n`);
-  addBytes(ESC_POS.TXT_NORMAL);
-  addBytes(ESC_POS.TXT_BOLD_OFF);
-  addText('--------------------------------\n\n');
-  addText('¡Gracias por su compra!\n\n\n');
+  if (showPrices) {
+    addBytes(ESC_POS.TXT_BOLD_ON);
+    addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
+    addText(`TOTAL: $${total.toFixed(2)}\n`);
+    addBytes(ESC_POS.TXT_NORMAL);
+    addBytes(ESC_POS.TXT_BOLD_OFF);
+    addText('--------------------------------\n\n');
+    addText('¡Gracias por su compra!\n\n\n');
+  } else {
+    const totalItems = items.reduce((sum, it) => sum + it.quantity, 0);
+    addBytes(ESC_POS.TXT_BOLD_ON);
+    addText(`Articulos Totales: ${totalItems}\n`);
+    addBytes(ESC_POS.TXT_BOLD_OFF);
+    addText('--------------------------------\n\n');
+    addText('¡Comanda enviada a preparacion!\n\n\n');
+  }
 
   addBytes(ESC_POS.CUT_PAPER);
 
@@ -77,9 +105,10 @@ export const printTicketTCP = (
   tableNumber: string,
   items: CartItem[],
   total: number,
+  options?: PrintOptions,
 ): Promise<boolean> => {
   return new Promise((resolve, reject) => {
-    const payload = generateEscPosBuffer(tableNumber, items, total);
+    const payload = generateEscPosBuffer(tableNumber, items, total, options);
 
     const client = TcpSocket.createConnection(
       { host: PRINTER_CONFIG.host, port: PRINTER_CONFIG.port },

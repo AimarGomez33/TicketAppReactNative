@@ -6,6 +6,7 @@ export interface Product {
   name: string;
   price: number;
   category: string;
+  description?: string;
 }
 
 export interface CartItem {
@@ -33,6 +34,18 @@ export interface OrderHistoryItem {
   timestamp: string;
 }
 
+export type AppVersionMode = 'general' | 'detailed';
+
+export interface CustomAlertData {
+  title: string;
+  message: string;
+  type?: 'success' | 'error' | 'info' | 'printer';
+  confirmText?: string;
+  cancelText?: string;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}
+
 interface CartState {
   tableNumber: string; // Mesa activa seleccionada
   cart: Record<string, CartItem>; // Carrito de la mesa activa (para compatibilidad O(1))
@@ -41,11 +54,23 @@ interface CartState {
   
   activeTab: 'tables' | 'ordering' | 'payment'; // Pantalla/Tab activa global
   
+  // Modo de versión de la app
+  appMode: AppVersionMode; // 'general' = versión simplificada, 'detailed' = versión detallada
+  includePricesInTicket: boolean; // Controla si se imprimen los precios en el ticket
+  customAlert: CustomAlertData | null; // Estado del alert estilizado global
+
   // Acciones
+  setAppMode: (mode: AppVersionMode) => void;
+  setIncludePricesInTicket: (include: boolean) => void;
+  showCustomAlert: (alert: CustomAlertData) => void;
+  hideCustomAlert: () => void;
+
   setActiveTab: (tab: 'tables' | 'ordering' | 'payment') => void;
   setTableNumber: (table: string) => void;
   setTableStatus: (table: string, status: TableStatus) => void;
   addItem: (product: Product, notes?: string) => void;
+  addQuantity: (product: Product, quantityToAdd: number, notes?: string) => void;
+  setQuantity: (product: Product, quantity: number, notes?: string) => void;
   removeItem: (productId: string) => void;
   updateItemNotes: (productId: string, notes: string) => void;
   clearCart: () => void;
@@ -70,6 +95,25 @@ export const useCartStore = create<CartState>((set, get) => ({
   tables: initialTables(),
   ordersHistory: [],
   activeTab: 'tables',
+  appMode: 'general',
+  includePricesInTicket: true,
+  customAlert: null,
+
+  setAppMode: (appMode) => {
+    // Al cambiar de modo:
+    // - 'general': ticket intacto con precios (includePricesInTicket = true)
+    // - 'detailed': elimina precios de tickets salvo requerimiento (includePricesInTicket = false)
+    set({
+      appMode,
+      includePricesInTicket: appMode === 'general',
+    });
+  },
+
+  setIncludePricesInTicket: (includePricesInTicket) => set({ includePricesInTicket }),
+
+  showCustomAlert: (customAlert) => set({ customAlert }),
+
+  hideCustomAlert: () => set({ customAlert: null }),
 
   setActiveTab: (activeTab) => set({ activeTab }),
 
@@ -131,14 +175,19 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   // Agregar +1 unidad de un producto a la mesa activa
   addItem: (product, notes) =>
+    get().addQuantity(product, 1, notes),
+
+  // Agregar N unidades de un producto a la mesa activa
+  addQuantity: (product, quantityToAdd, notes) =>
     set((state) => {
+      if (quantityToAdd <= 0) return state;
       const existing = state.cart[product.id];
       const currentQty = existing ? existing.quantity : 0;
       const mergedNotes = notes !== undefined ? notes : (existing?.notes || '');
 
       const updatedCart = {
         ...state.cart,
-        [product.id]: { product, quantity: currentQty + 1, notes: mergedNotes },
+        [product.id]: { product, quantity: currentQty + quantityToAdd, notes: mergedNotes },
       };
 
       // Sincronizar en el mapa de mesas también
@@ -146,6 +195,36 @@ export const useCartStore = create<CartState>((set, get) => ({
       if (state.tableNumber) {
         updatedTables[state.tableNumber] = {
           status: 'busy',
+          cart: updatedCart,
+          lastUpdated: new Date().toLocaleTimeString(),
+        };
+      }
+
+      return {
+        cart: updatedCart,
+        tables: updatedTables,
+      };
+    }),
+
+  // Establecer cantidad exacta de un producto
+  setQuantity: (product, quantity, notes) =>
+    set((state) => {
+      const existing = state.cart[product.id];
+      const mergedNotes = notes !== undefined ? notes : (existing?.notes || '');
+      const updatedCart = { ...state.cart };
+
+      if (quantity > 0) {
+        updatedCart[product.id] = { product, quantity, notes: mergedNotes };
+      } else {
+        delete updatedCart[product.id];
+      }
+
+      // Sincronizar en el mapa de mesas también
+      const updatedTables = { ...state.tables };
+      if (state.tableNumber) {
+        const hasItems = Object.keys(updatedCart).length > 0;
+        updatedTables[state.tableNumber] = {
+          status: hasItems ? 'busy' : 'free',
           cart: updatedCart,
           lastUpdated: new Date().toLocaleTimeString(),
         };
@@ -268,8 +347,8 @@ export const useCartStore = create<CartState>((set, get) => ({
       timestamp: new Date().toLocaleString(),
     };
 
-    set((state) => {
-      const updatedTables = { ...state.tables };
+    set((prev) => {
+      const updatedTables = { ...prev.tables };
       updatedTables[activeTable] = {
         status: 'cleaning', // Cambia a limpieza antes de quedar libre
         cart: {},
@@ -279,7 +358,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       return {
         cart: {},
         tables: updatedTables,
-        ordersHistory: [...state.ordersHistory, newOrder],
+        ordersHistory: [...prev.ordersHistory, newOrder],
         tableNumber: '', // Deseleccionar la mesa
       };
     });

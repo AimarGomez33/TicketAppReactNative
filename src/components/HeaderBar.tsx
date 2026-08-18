@@ -16,8 +16,9 @@ export const HeaderBar: React.FC<Props> = ({
   isPrinterConnected = true,
 }) => {
   const tableNumber = useCartStore(state => state.tableNumber);
-  const setTableNumber = useCartStore(state => state.setTableNumber);
   const setActiveTab = useCartStore(state => state.setActiveTab);
+  const appMode = useCartStore(state => state.appMode);
+  const setAppMode = useCartStore(state => state.setAppMode);
 
   return (
     <View style={styles.container}>
@@ -54,13 +55,56 @@ export const HeaderBar: React.FC<Props> = ({
         </View>
       </View>
 
+      {/* Selector de Modo / Versión de la App */}
+      <View style={styles.modeSelectorContainer}>
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            appMode === 'general' && styles.modeButtonActive,
+          ]}
+          onPress={() => setAppMode('general')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.modeButtonText,
+              appMode === 'general' && styles.modeButtonTextActive,
+            ]}
+          >
+            🍽️ Platillos Generales
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.modeButton,
+            appMode === 'detailed' && styles.modeButtonActive,
+          ]}
+          onPress={() => setAppMode('detailed')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.modeButtonText,
+              appMode === 'detailed' && styles.modeButtonTextActive,
+            ]}
+          >
+            📋 Menú Detallado
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Fila Inferior: Buscador en Tiempo Real */}
       <View style={styles.searchContainer}>
         <Search size={18} color="#ab286c" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar platillo o bebida..."
-          placeholderTextColor="#5a3f49"
+          placeholder={
+            appMode === 'general'
+              ? 'Buscar platillo general (ej. Quesadilla, Taco...)'
+              : 'Buscar platillo específico (ej. Tinga, Arrachera...)'
+          }
+          placeholderTextColor="#8e6e79"
           value={searchQuery}
           onChangeText={onSearchChange}
           clearButtonMode="while-editing"
@@ -125,6 +169,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  modeSelectorContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#ffe8ee',
+    borderRadius: 20,
+    padding: 3,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#ffe0ea',
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeButtonActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#b3006c',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  modeButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8e6e79',
+  },
+  modeButtonTextActive: {
+    color: '#b3006c',
+    fontWeight: '800',
   },
   searchContainer: {
     flexDirection: 'row',
