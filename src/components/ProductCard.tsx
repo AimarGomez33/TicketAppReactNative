@@ -37,7 +37,7 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
         onPress={() => setModalVisible(true)}
         activeOpacity={0.85}
       >
-        <View>
+        <View style={styles.contentArea}>
           <View style={styles.titleRow}>
             <Text style={styles.productName} numberOfLines={2}>
               {product.name}
@@ -61,28 +61,6 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
             </Text>
           ) : null}
         </View>
-
-        {/* Accesos rápidos específicos para Chalupas en la misma tarjeta */}
-        {isChalupa && (
-          <View style={styles.quickChalupaRow}>
-            <Text style={styles.quickChalupaLabel}>CANTIDAD RÁPIDA:</Text>
-            <View style={styles.quickButtonsContainer}>
-              {[10, 20, 30, 50].map((amt) => (
-                <TouchableOpacity
-                  key={amt}
-                  style={styles.quickChalupaBtn}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    addQuantity(product, amt);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.quickChalupaBtnText}>+{amt}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
 
         <View style={styles.footer}>
           <Text style={styles.price}>${product.price.toFixed(2)}</Text>
@@ -110,7 +88,7 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Minus size={14} color="#5a3f49" />
+                  <Minus size={13} color="#5a3f49" />
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
@@ -130,7 +108,7 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Plus size={14} color="#5a3f49" />
+                  <Plus size={13} color="#5a3f49" />
                 </TouchableOpacity>
               </View>
             ) : (
@@ -142,7 +120,7 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
                 }}
                 activeOpacity={0.7}
               >
-                <Plus size={16} color="#b3006c" />
+                <Plus size={15} color="#b3006c" />
               </TouchableOpacity>
             )}
           </View>
@@ -165,11 +143,11 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    margin: 6,
-    padding: 12,
+    margin: 5,
+    padding: 10,
     borderRadius: 14,
     borderWidth: 1.5,
-    minHeight: 120,
+    minHeight: 125,
     justifyContent: 'space-between',
   },
   inactiveCard: {
@@ -180,6 +158,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(179, 0, 108, 0.04)',
     borderColor: '#b3006c',
   },
+  contentArea: {
+    flex: 1,
+  },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -189,8 +170,9 @@ const styles = StyleSheet.create({
   productName: {
     flex: 1,
     color: '#27171d',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
+    lineHeight: 16,
   },
   badge: {
     backgroundColor: '#b3006c',
@@ -205,80 +187,49 @@ const styles = StyleSheet.create({
   },
   productDesc: {
     color: '#8e6e79',
-    fontSize: 11,
+    fontSize: 10.5,
     marginTop: 3,
-    lineHeight: 14,
+    lineHeight: 13,
   },
   notesText: {
     color: '#b3006c',
     fontSize: 10,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 3,
     fontStyle: 'italic',
-  },
-  quickChalupaRow: {
-    marginTop: 8,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: '#ffe0ea',
-  },
-  quickChalupaLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#b3006c',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  quickButtonsContainer: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  quickChalupaBtn: {
-    flex: 1,
-    backgroundColor: '#ffd9e5',
-    borderColor: '#b3006c',
-    borderWidth: 0.8,
-    borderRadius: 8,
-    paddingVertical: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickChalupaBtnText: {
-    color: '#b3006c',
-    fontSize: 11,
-    fontWeight: 'bold',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
+    paddingTop: 4,
   },
   price: {
     color: '#ab286c',
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   actionControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   layersBtn: {
     backgroundColor: '#fff0f3',
     borderColor: '#ffe0ea',
     borderWidth: 1,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
   addBtn: {
     backgroundColor: '#ffd9e5',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#b3006c',
@@ -294,11 +245,11 @@ const styles = StyleSheet.create({
     borderColor: '#ffe0ea',
     borderWidth: 1,
     borderRadius: 20,
-    height: 32,
+    height: 30,
     paddingHorizontal: 2,
   },
   qtyBtn: {
-    width: 26,
+    width: 24,
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
@@ -306,8 +257,8 @@ const styles = StyleSheet.create({
   qtyText: {
     color: '#27171d',
     fontWeight: 'bold',
-    fontSize: 12,
-    width: 22,
+    fontSize: 11,
+    width: 18,
     textAlign: 'center',
   },
 });

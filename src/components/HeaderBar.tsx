@@ -1,8 +1,9 @@
 // src/components/HeaderBar.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useCartStore } from '../store/useCartStore';
-import { Search, Printer, Wifi, Menu } from 'lucide-react-native';
+import { Search, Printer, Wifi, Menu, Database } from 'lucide-react-native';
+import { SupabaseConfigModal } from './SupabaseConfigModal';
 
 interface Props {
   searchQuery: string;
@@ -15,108 +16,133 @@ export const HeaderBar: React.FC<Props> = ({
   onSearchChange,
   isPrinterConnected = true,
 }) => {
+  const [configModalVisible, setConfigModalVisible] = useState(false);
+
   const tableNumber = useCartStore(state => state.tableNumber);
   const setActiveTab = useCartStore(state => state.setActiveTab);
   const appMode = useCartStore(state => state.appMode);
   const setAppMode = useCartStore(state => state.setAppMode);
+  const isRealtimeConnected = useCartStore(state => state.isRealtimeConnected);
 
   return (
-    <View style={styles.container}>
-      {/* Fila Superior: Título, Selector de Mesa e Indicadores */}
-      <View style={styles.topRow}>
-        <View style={styles.leftSection}>
-          <TouchableOpacity 
-            style={styles.menuButton} 
-            onPress={() => setActiveTab('tables')}
-          >
-            <Menu size={22} color="#5a3f49" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Nueva Orden</Text>
+    <>
+      <View style={styles.container}>
+        {/* Fila Superior: Título, Selector de Mesa e Indicadores */}
+        <View style={styles.topRow}>
+          <View style={styles.leftSection}>
+            <TouchableOpacity 
+              style={styles.menuButton} 
+              onPress={() => setActiveTab('tables')}
+            >
+              <Menu size={22} color="#5a3f49" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Nueva Orden</Text>
+          </View>
+
+          <View style={styles.rightSection}>
+            {/* Badge de Mesa */}
+            <TouchableOpacity 
+              style={styles.tableBadge}
+              onPress={() => setActiveTab('tables')}
+            >
+              <Text style={styles.tableBadgeText}>
+                {tableNumber ? `MESA ${tableNumber.toUpperCase()}` : 'SIN MESA'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.statusIcons}>
+              {/* Botón de estado / configuración de Supabase */}
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => setConfigModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Database
+                  size={18}
+                  color={isRealtimeConnected ? '#059669' : '#8e6e79'}
+                />
+              </TouchableOpacity>
+
+              <Wifi size={18} color="#b3006c" />
+              <Printer
+                size={18}
+                color={isPrinterConnected ? '#b3006c' : '#ba1a1a'}
+              />
+            </View>
+          </View>
         </View>
 
-        <View style={styles.rightSection}>
-          {/* Badge de Mesa */}
-          <TouchableOpacity 
-            style={styles.tableBadge}
-            onPress={() => setActiveTab('tables')}
+        {/* Selector de Modo / Versión de la App */}
+        <View style={styles.modeSelectorContainer}>
+          <TouchableOpacity
+            style={[
+              styles.modeButton,
+              appMode === 'general' && styles.modeButtonActive,
+            ]}
+            onPress={() => setAppMode('general')}
+            activeOpacity={0.7}
           >
-            <Text style={styles.tableBadgeText}>
-              {tableNumber ? `MESA ${tableNumber.toUpperCase()}` : 'SIN MESA'}
+            <Text
+              style={[
+                styles.modeButtonText,
+                appMode === 'general' && styles.modeButtonTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              🍽️ Platillos Generales
             </Text>
           </TouchableOpacity>
 
-          <View style={styles.statusIcons}>
-            <Wifi size={18} color="#b3006c" />
-            <Printer
-              size={18}
-              color={isPrinterConnected ? '#b3006c' : '#ba1a1a'}
-            />
-          </View>
+          <TouchableOpacity
+            style={[
+              styles.modeButton,
+              appMode === 'detailed' && styles.modeButtonActive,
+            ]}
+            onPress={() => setAppMode('detailed')}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.modeButtonText,
+                appMode === 'detailed' && styles.modeButtonTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              📋 Menú Detallado
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Fila Inferior: Buscador en Tiempo Real */}
+        <View style={styles.searchContainer}>
+          <Search size={18} color="#ab286c" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={
+              appMode === 'general'
+                ? 'Buscar platillo general (ej. Quesadilla, Taco...)'
+                : 'Buscar platillo específico (ej. Tinga, Arrachera...)'
+            }
+            placeholderTextColor="#8e6e79"
+            value={searchQuery}
+            onChangeText={onSearchChange}
+            clearButtonMode="while-editing"
+          />
         </View>
       </View>
 
-      {/* Selector de Modo / Versión de la App */}
-      <View style={styles.modeSelectorContainer}>
-        <TouchableOpacity
-          style={[
-            styles.modeButton,
-            appMode === 'general' && styles.modeButtonActive,
-          ]}
-          onPress={() => setAppMode('general')}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.modeButtonText,
-              appMode === 'general' && styles.modeButtonTextActive,
-            ]}
-          >
-            🍽️ Platillos Generales
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.modeButton,
-            appMode === 'detailed' && styles.modeButtonActive,
-          ]}
-          onPress={() => setAppMode('detailed')}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[
-              styles.modeButtonText,
-              appMode === 'detailed' && styles.modeButtonTextActive,
-            ]}
-          >
-            📋 Menú Detallado
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Fila Inferior: Buscador en Tiempo Real */}
-      <View style={styles.searchContainer}>
-        <Search size={18} color="#ab286c" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={
-            appMode === 'general'
-              ? 'Buscar platillo general (ej. Quesadilla, Taco...)'
-              : 'Buscar platillo específico (ej. Tinga, Arrachera...)'
-          }
-          placeholderTextColor="#8e6e79"
-          value={searchQuery}
-          onChangeText={onSearchChange}
-          clearButtonMode="while-editing"
-        />
-      </View>
-    </View>
+      {/* Modal de Configuración Supabase */}
+      <SupabaseConfigModal
+        visible={configModalVisible}
+        onClose={() => setConfigModalVisible(false)}
+      />
+    </>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff8f8', // surface/background general
+    backgroundColor: '#fff8f8',
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 10,
@@ -169,6 +195,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  iconBtn: {
+    padding: 2,
   },
   modeSelectorContainer: {
     flexDirection: 'row',

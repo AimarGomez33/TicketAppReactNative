@@ -6,23 +6,29 @@ import { CartItem } from '../store/useCartStore';
 const PRINTER_CONFIG = {
   host: '192.168.100.200',
   port: 9100,
-  timeout: 3000,
+  timeout: 3500,
 };
 
 const ESC_POS = {
   INIT: [0x1b, 0x40],
   ALIGN_CENTER: [0x1b, 0x61, 0x01],
   ALIGN_LEFT: [0x1b, 0x61, 0x00],
+  ALIGN_RIGHT: [0x1b, 0x61, 0x02],
   TXT_BOLD_ON: [0x1b, 0x45, 0x01],
   TXT_BOLD_OFF: [0x1b, 0x45, 0x00],
   TXT_DOUBLE_HEIGHT: [0x1b, 0x21, 0x10],
+  TXT_DOUBLE_SIZE: [0x1b, 0x21, 0x30],
   TXT_NORMAL: [0x1b, 0x21, 0x00],
   CUT_PAPER: [0x1d, 0x56, 0x42, 0x00],
 };
 
 export interface PrintOptions {
   showPrices?: boolean;
-  title?: string;
+  isKitchenComanda?: boolean;
+  currentRound?: number;
+  paymentMethod?: 'cash' | 'card' | 'transfer';
+  amountPaid?: number;
+  change?: number;
 }
 
 export const generateEscPosBuffer = (
@@ -32,8 +38,10 @@ export const generateEscPosBuffer = (
   options?: PrintOptions,
 ): Uint8Array => {
   const showPrices = options?.showPrices ?? true;
-  const bytes: number[] = [];
+  const isKitchen = options?.isKitchenComanda ?? (!showPrices);
+  const currentRound = options?.currentRound || 1;
 
+  const bytes: number[] = [];
   const addBytes = (arr: number[]) => bytes.push(...arr);
   const addText = (text: string) => {
     for (let i = 0; i < text.length; i++) {
@@ -42,7 +50,6 @@ export const generateEscPosBuffer = (
   };
 
   addBytes(ESC_POS.INIT);
-
   addBytes(ESC_POS.ALIGN_CENTER);
   addBytes(ESC_POS.TXT_BOLD_ON);
   addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
@@ -50,54 +57,119 @@ export const generateEscPosBuffer = (
   addBytes(ESC_POS.TXT_NORMAL);
   addBytes(ESC_POS.TXT_BOLD_OFF);
 
-  if (!showPrices) {
-    addBytes(ESC_POS.TXT_BOLD_ON);
-    addText('*** COMANDA DE COCINA ***\n');
-    addBytes(ESC_POS.TXT_BOLD_OFF);
-  }
-
-  addText(`Mesa: ${tableNumber || 'S/N'}\n`);
-  addText(`Fecha: ${new Date().toLocaleString()}\n`);
-  addText('--------------------------------\n');
-
-  addBytes(ESC_POS.ALIGN_LEFT);
-  items.forEach(({ product, quantity, notes }, index) => {
-    addBytes(ESC_POS.TXT_BOLD_ON);
-    addText(`${quantity}x ${product.name}\n`);
-    addBytes(ESC_POS.TXT_BOLD_OFF);
-    if (notes && notes.trim().length > 0) {
-      addText(`   * NOTA: ${notes.trim()}\n`);
-    }
-    if (showPrices) {
-      const itemTotal = (product.price * quantity).toFixed(2);
-      addText(`    $${product.price.toFixed(2)} c/u  ->  $${itemTotal}\n`);
-    } else {
-      // Salto de línea entre cada platillo para facilitar la lectura en cocina
-      addText('\n');
-    }
-  });
-
-  addBytes(ESC_POS.ALIGN_CENTER);
-  addText('--------------------------------\n');
-  if (showPrices) {
+  if (isKitchen) {
     addBytes(ESC_POS.TXT_BOLD_ON);
     addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
-    addText(`TOTAL: $${total.toFixed(2)}\n`);
+    addText(`*** COMANDA COCINA - MESA ${tableNumber || 'S/N'} ***\n`);
     addBytes(ESC_POS.TXT_NORMAL);
     addBytes(ESC_POS.TXT_BOLD_OFF);
-    addText('--------------------------------\n\n');
-    addText('¡Gracias por su compra!\n\n\n');
-  } else {
-    const totalItems = items.reduce((sum, it) => sum + it.quantity, 0);
+    addText(`Ronda Actual: #${currentRound} | Hora: ${new Date().toLocaleTimeString()}\n`);
+    addText('================================\n');
+
+    // Separar platillos nuevos (pending o de la ronda actual) vs anteriores (ya enviados)
+    const newItems = items.filter(it => it.status === 'pending' || (it.round && it.round === currentRound));
+    const previousItems = items.filter(it => it.status === 'sent_to_kitchen' && it.round && it.round < currentRound);
+
+    addBytes(ESC_POS.ALIGN_LEFT);
+
+    // Sección 1: Nuevos Platillos a Preparar
     addBytes(ESC_POS.TXT_BOLD_ON);
-    addText(`Articulos Totales: ${totalItems}\n`);
+    addText(`[!] NUEVOS A PREPARAR (Ronda ${currentRound}):\n`);
     addBytes(ESC_POS.TXT_BOLD_OFF);
-    addText('--------------------------------\n\n');
-    addText('¡Comanda enviada a preparacion!\n\n\n');
+    addText('--------------------------------\n');
+
+    if (newItems.length === 0) {
+      // Si todos estaban marcados, imprimir todos
+      items.forEach(({ product, quantity, notes }) => {
+        addBytes(ESC_POS.TXT_BOLD_ON);
+        addText(` > ${quantity}x ${product.name}\n`);
+        addBytes(ESC_POS.TXT_BOLD_OFF);
+        if (notes && notes.trim().length > 0) {
+          addText(`    * NOTA: ${notes.trim()}\n`);
+        }
+        addText('\n');
+      });
+    } else {
+      newItems.forEach(({ product, quantity, notes }) => {
+        addBytes(ESC_POS.TXT_BOLD_ON);
+        addText(` > ${quantity}x ${product.name}\n`);
+        addBytes(ESC_POS.TXT_BOLD_OFF);
+        if (notes && notes.trim().length > 0) {
+          addText(`    * NOTA: ${notes.trim()}\n`);
+        }
+        addText('\n');
+      });
+    }
+
+    // Sección 2: Platillos Anteriores ya enviados (Contexto para cocina)
+    if (previousItems.length > 0) {
+      addText('\n');
+      addBytes(ESC_POS.TXT_BOLD_ON);
+      addText('[v] YA ENVIADOS ANTERIORMENTE:\n');
+      addBytes(ESC_POS.TXT_BOLD_OFF);
+      addText('--------------------------------\n');
+      previousItems.forEach(({ product, quantity, notes, round }) => {
+        addText(` - (${quantity}x) ${product.name} [Ronda ${round || 1}]\n`);
+        if (notes && notes.trim().length > 0) {
+          addText(`    * ${notes.trim()}\n`);
+        }
+      });
+    }
+
+    addBytes(ESC_POS.ALIGN_CENTER);
+    addText('\n================================\n');
+    const totalQty = items.reduce((sum, it) => sum + it.quantity, 0);
+    addBytes(ESC_POS.TXT_BOLD_ON);
+    addText(`Total Acumulado Mesa: ${totalQty} articulos\n`);
+    addBytes(ESC_POS.TXT_BOLD_OFF);
+    addText('¡Comanda enviada a cocina!\n\n\n');
+
+  } else {
+    // Ticket de Cobro / Cliente
+    addBytes(ESC_POS.TXT_BOLD_ON);
+    addText(`TICKET DE CONSUMO - MESA ${tableNumber || 'S/N'}\n`);
+    addBytes(ESC_POS.TXT_BOLD_OFF);
+    addText(`Fecha: ${new Date().toLocaleString()}\n`);
+    addText('--------------------------------\n');
+
+    addBytes(ESC_POS.ALIGN_LEFT);
+    items.forEach(({ product, quantity, notes }) => {
+      const itemSubtotal = (product.price * quantity).toFixed(2);
+      addBytes(ESC_POS.TXT_BOLD_ON);
+      addText(`${quantity}x ${product.name}\n`);
+      addBytes(ESC_POS.TXT_BOLD_OFF);
+      if (notes && notes.trim().length > 0) {
+        addText(`   * Nota: ${notes.trim()}\n`);
+      }
+      addText(`   $${product.price.toFixed(2)} c/u  -->  $${itemSubtotal}\n`);
+    });
+
+    addBytes(ESC_POS.ALIGN_CENTER);
+    addText('--------------------------------\n');
+    addBytes(ESC_POS.TXT_BOLD_ON);
+    addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
+    addText(`TOTAL A PAGAR: $${total.toFixed(2)}\n`);
+    addBytes(ESC_POS.TXT_NORMAL);
+    addBytes(ESC_POS.TXT_BOLD_OFF);
+
+    if (options?.paymentMethod) {
+      const methodLabel =
+        options.paymentMethod === 'cash'
+          ? 'EFECTIVO'
+          : options.paymentMethod === 'card'
+          ? 'TARJETA'
+          : 'TRANSFERENCIA';
+      addText(`Metodo de Pago: ${methodLabel}\n`);
+      if (options.amountPaid && options.amountPaid > 0) {
+        addText(`Pagado: $${options.amountPaid.toFixed(2)} | Cambio: $${(options.change || 0).toFixed(2)}\n`);
+      }
+    }
+
+    addText('--------------------------------\n');
+    addText('¡Muchas gracias por su preferencia!\n\n\n');
   }
 
   addBytes(ESC_POS.CUT_PAPER);
-
   return new Uint8Array(bytes);
 };
 

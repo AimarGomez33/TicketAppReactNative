@@ -6,12 +6,20 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
-  TextInput,
   Modal,
 } from 'react-native';
 import { useCartStore } from '../store/useCartStore';
-import { ChevronUp, Trash2, Printer, Receipt, Tag } from 'lucide-react-native';
+import {
+  ChevronUp,
+  Trash2,
+  Printer,
+  Receipt,
+  Tag,
+  Send,
+  CheckCircle2,
+  Clock,
+  BellRing,
+} from 'lucide-react-native';
 import { printTicketTCP } from '../services/printerService';
 import { QuantityModal } from './QuantityModal';
 import { CartItem } from '../store/useCartStore';
@@ -27,9 +35,12 @@ export const CartSheet: React.FC = () => {
   const removeItem = useCartStore(state => state.removeItem);
   const addItem = useCartStore(state => state.addItem);
   const setQuantity = useCartStore(state => state.setQuantity);
-  const updateItemNotes = useCartStore(state => state.updateItemNotes);
   const getTotal = useCartStore(state => state.getTotal);
   const getItemCount = useCartStore(state => state.getItemCount);
+  const getPendingItemsCount = useCartStore(state => state.getPendingItemsCount);
+  const getCurrentTableRound = useCartStore(state => state.getCurrentTableRound);
+  const sendRoundToKitchen = useCartStore(state => state.sendRoundToKitchen);
+  const requestBillForTable = useCartStore(state => state.requestBillForTable);
   const setActiveTab = useCartStore(state => state.setActiveTab);
   const appMode = useCartStore(state => state.appMode);
   const includePricesInTicket = useCartStore(state => state.includePricesInTicket);
@@ -38,51 +49,77 @@ export const CartSheet: React.FC = () => {
 
   const items = Object.values(cart);
   const itemCount = getItemCount();
-
-  // El total es la suma directa de los platillos consumidos
+  const pendingCount = getPendingItemsCount();
+  const currentRound = getCurrentTableRound();
   const total = getTotal();
 
-  const handlePrint = async () => {
+  // Enviar comanda a cocina e imprimir
+  const handleSendToKitchen = async () => {
     if (itemCount === 0) {
       showCustomAlert({
         type: 'info',
         title: 'Orden Vacía',
-        message: 'Agrega al menos un platillo a la comanda antes de imprimir.',
+        message: 'Agrega al menos un platillo a la comanda antes de enviar a cocina.',
       });
       return;
     }
 
     setIsPrinting(true);
     try {
-      // Imprimir según la configuración de precios del ticket
+      // Imprimir comanda de cocina con rondas
       await printTicketTCP(tableNumber, items, total, {
-        showPrices: includePricesInTicket,
+        isKitchenComanda: true,
+        showPrices: false,
+        currentRound,
       });
+
+      await sendRoundToKitchen(tableNumber);
 
       showCustomAlert({
         type: 'printer',
-        title: '¡Ticket Impreso con Éxito!',
-        message: includePricesInTicket
-          ? `El ticket de la Mesa ${tableNumber || 'S/N'} con desglose de precios ($${total.toFixed(2)}) se ha enviado a la impresora.`
-          : `La comanda de cocina para la Mesa ${tableNumber || 'S/N'} (sin precios) se ha impreso correctamente.`,
-        confirmText: 'Aceptar',
+        title: `¡Comanda Enviada (Ronda #${currentRound})!`,
+        message: `Los platillos de la Mesa ${tableNumber || 'S/N'} se han enviado a cocina y el ticket de comanda se ha impreso.`,
+        confirmText: 'Entendido',
         onConfirm: () => {
-          clearCart();
           setIsExpanded(false);
         },
       });
     } catch (error: any) {
+      // Si la impresora no responde, aún así guardamos la ronda
+      await sendRoundToKitchen(tableNumber);
       showCustomAlert({
         type: 'error',
-        title: 'Error de Impresora',
-        message:
-          error.message ||
-          'No se pudo conectar con la impresora térmica (192.168.100.200).',
-        confirmText: 'Entendido',
+        title: 'Aviso de Impresora',
+        message: `La comanda se registró pero no se pudo imprimir (${error.message || '192.168.100.200'}).`,
+        confirmText: 'Aceptar',
       });
     } finally {
       setIsPrinting(false);
     }
+  };
+
+  // Mesero solicita la cuenta para que el cajero la cobre
+  const handleRequestBill = async () => {
+    if (itemCount === 0) {
+      showCustomAlert({
+        type: 'info',
+        title: 'Mesa Sin Consumo',
+        message: 'No puedes solicitar la cuenta de una mesa vacía.',
+      });
+      return;
+    }
+
+    await requestBillForTable(tableNumber);
+    showCustomAlert({
+      type: 'success',
+      title: '¡Cuenta Solicitada a Caja!',
+      message: `Se ha notificado al operador de Caja en tiempo real para el cobro de la Mesa ${tableNumber}.`,
+      confirmText: 'Volver a Mesas',
+      onConfirm: () => {
+        setIsExpanded(false);
+        setActiveTab('tables');
+      },
+    });
   };
 
   const handleGoToPayment = () => {
@@ -103,32 +140,52 @@ export const CartSheet: React.FC = () => {
             activeOpacity={0.8}
           >
             <View>
-              <Text style={styles.collapsedCountText}>Total ({itemCount} artículos)</Text>
+              <View style={styles.collapsedBadgeRow}>
+                <Text style={styles.collapsedCountText}>Total ({itemCount} arts.)</Text>
+                {pendingCount > 0 && (
+                  <View style={styles.pendingBadge}>
+                    <Text style={styles.pendingBadgeText}>{pendingCount} por enviar</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.collapsedTotalText}>${total.toFixed(2)}</Text>
             </View>
             <ChevronUp size={20} color="#ab286c" style={styles.upArrow} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.printBtn, isPrinting && styles.printBtnDisabled]}
-            onPress={handlePrint}
-            disabled={isPrinting}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.printBtnText}>IMPRIMIR</Text>
-            <Printer size={16} color="#FFF" style={styles.printIcon} />
-          </TouchableOpacity>
+          {/* Botón rápido según modo */}
+          {appMode === 'detailed' ? (
+            <TouchableOpacity
+              style={[styles.actionBtnHeader, pendingCount > 0 ? styles.kitchenBtnActive : styles.kitchenBtnInactive]}
+              onPress={handleSendToKitchen}
+              disabled={isPrinting}
+              activeOpacity={0.8}
+            >
+              <Send size={15} color="#FFF" />
+              <Text style={styles.actionBtnHeaderText}>
+                {pendingCount > 0 ? `COCINA (${pendingCount})` : 'A COCINA'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.payBtnHeader}
+              onPress={handleGoToPayment}
+              activeOpacity={0.8}
+            >
+              <Receipt size={15} color="#FFF" />
+              <Text style={styles.actionBtnHeaderText}>COBRAR</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
-      {/* Modal / Sheet Expandido completo */}
+      {/* Sheet Expandido Completo */}
       <Modal
         visible={isExpanded}
         transparent
         animationType="slide"
         onRequestClose={() => setIsExpanded(false)}
       >
-        {/* Backdrop overlay */}
         <TouchableOpacity
           style={styles.backdrop}
           activeOpacity={1}
@@ -138,13 +195,16 @@ export const CartSheet: React.FC = () => {
             <TouchableOpacity
               activeOpacity={1}
               style={styles.sheetContainer}
-              onPress={(e) => e.stopPropagation()} // Evita cerrar al tocar contenido
+              onPress={(e) => e.stopPropagation()}
             >
-              {/* Manija de arrastre / Drag handle */}
+              {/* Encabezado */}
               <View style={styles.dragHandleContainer}>
                 <View style={styles.dragHandle} />
                 <View style={styles.sheetHeader}>
-                  <Text style={styles.sheetTitle}>Detalles de Orden</Text>
+                  <View>
+                    <Text style={styles.sheetTitle}>Comanda de Mesa</Text>
+                    <Text style={styles.sheetSubtitle}>Ronda Actual: #{currentRound}</Text>
+                  </View>
                   <View style={styles.tableBadge}>
                     <Text style={styles.tableBadgeText}>
                       {tableNumber ? `MESA ${tableNumber.toUpperCase()}` : 'SIN MESA'}
@@ -153,18 +213,32 @@ export const CartSheet: React.FC = () => {
                 </View>
               </View>
 
-              {/* Lista de productos scrollable */}
+              {/* Lista de Productos Scrollable */}
               <ScrollView style={styles.itemList} contentContainerStyle={styles.itemListContent} nestedScrollEnabled>
                 {items.map((item) => {
-                  const { product, quantity, notes } = item;
+                  const { product, quantity, notes, status, round } = item;
+                  const isPending = status === 'pending';
+
                   return (
-                    <View key={product.id} style={styles.itemRow}>
+                    <View key={product.id} style={[styles.itemRow, isPending && styles.itemRowPending]}>
                       <TouchableOpacity
                         style={styles.itemInfo}
                         onPress={() => setEditingItem(item)}
                         activeOpacity={0.7}
                       >
-                        <Text style={styles.itemName}>{product.name}</Text>
+                        <View style={styles.itemTitleRow}>
+                          <Text style={styles.itemName}>{product.name}</Text>
+                          <View style={[styles.statusTag, isPending ? styles.statusTagPending : styles.statusTagSent]}>
+                            {isPending ? (
+                              <Clock size={10} color="#b3006c" />
+                            ) : (
+                              <CheckCircle2 size={10} color="#10B981" />
+                            )}
+                            <Text style={[styles.statusTagText, isPending ? styles.statusTagTextPending : styles.statusTagTextSent]}>
+                              {isPending ? 'Por Enviar' : `En Cocina (R#${round || 1})`}
+                            </Text>
+                          </View>
+                        </View>
                         <Text style={styles.itemUnitText}>
                           ${product.price.toFixed(2)} c/u {notes ? `• 📝 ${notes}` : ''}
                         </Text>
@@ -203,14 +277,14 @@ export const CartSheet: React.FC = () => {
                 })}
               </ScrollView>
 
-              {/* Resumen de totales y acciones finales */}
+              {/* Pie de Acciones */}
               <View style={styles.footerContainer}>
-                {/* Selector / Indicador de Ticket con o sin Precios */}
+                {/* Selector de Impresión de Precios */}
                 <View style={styles.ticketConfigRow}>
                   <View style={styles.ticketConfigInfo}>
                     <Tag size={14} color="#b3006c" />
                     <Text style={styles.ticketConfigLabel}>
-                      Ticket: {includePricesInTicket ? 'Con Precios' : 'Sin Precios (Comanda)'}
+                      Impresión: {includePricesInTicket ? 'Ticket Cliente ($)' : 'Comanda Cocina (Sin $)'}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -227,57 +301,70 @@ export const CartSheet: React.FC = () => {
                         includePricesInTicket && styles.ticketConfigToggleTextActive,
                       ]}
                     >
-                      {includePricesInTicket ? 'Precios: SÍ' : 'Precios: NO'}
+                      {includePricesInTicket ? 'Con Precios' : 'Sin Precios'}
                     </Text>
                   </TouchableOpacity>
                 </View>
 
+                {/* Total */}
                 <View style={[styles.summaryRow, styles.totalRow]}>
-                  <Text style={styles.totalLabel}>TOTAL A PAGAR</Text>
+                  <Text style={styles.totalLabel}>TOTAL ACUMULADO</Text>
                   <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
                 </View>
 
-                {/* Acciones principales */}
-                <View style={styles.actionRow}>
+                {/* Botón Principal: Enviar a Cocina */}
+                <TouchableOpacity
+                  style={[styles.kitchenSendBtn, isPrinting && styles.disabledBtn]}
+                  onPress={handleSendToKitchen}
+                  disabled={isPrinting}
+                  activeOpacity={0.8}
+                >
+                  <Send size={18} color="#FFF" style={styles.btnIconMargin} />
+                  <Text style={styles.kitchenSendBtnText}>
+                    {isPrinting
+                      ? 'ENVIANDO A COCINA...'
+                      : pendingCount > 0
+                      ? `ENVIAR A COCINA (${pendingCount} NUEVOS) • RONDA #${currentRound}`
+                      : `RE-IMPRIMIR COMANDA COCINA • RONDA #${currentRound}`}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Fila de Acciones Secundarias */}
+                <View style={styles.secondaryActionsRow}>
+                  {/* Botón Vaciar */}
                   <TouchableOpacity
                     style={styles.clearBtn}
                     onPress={clearCart}
                   >
-                    <Trash2 size={18} color="#ba1a1a" />
+                    <Trash2 size={16} color="#ba1a1a" />
                     <Text style={styles.clearBtnText}>Vaciar</Text>
                   </TouchableOpacity>
 
+                  {/* Botón Solicitar Cuenta (Mesero) */}
                   <TouchableOpacity
-                    style={[styles.checkoutBtn, isPrinting && styles.printBtnDisabled]}
-                    onPress={handleGoToPayment}
-                    disabled={isPrinting}
+                    style={styles.requestBillBtn}
+                    onPress={handleRequestBill}
                   >
-                    <Receipt size={18} color="#FFF" style={styles.btnIconMargin} />
-                    <Text style={styles.checkoutBtnText}>COBRAR CUENTA</Text>
+                    <BellRing size={16} color="#FFF" style={styles.btnIconMargin} />
+                    <Text style={styles.requestBillBtnText}>PEDIR CUENTA</Text>
+                  </TouchableOpacity>
+
+                  {/* Botón Cobro Directo (Caja) */}
+                  <TouchableOpacity
+                    style={styles.checkoutBtn}
+                    onPress={handleGoToPayment}
+                  >
+                    <Receipt size={16} color="#FFF" style={styles.btnIconMargin} />
+                    <Text style={styles.checkoutBtnText}>COBRAR</Text>
                   </TouchableOpacity>
                 </View>
-
-                <TouchableOpacity
-                  style={[styles.kitchenPrintBtn, isPrinting && styles.printBtnDisabled]}
-                  onPress={handlePrint}
-                  disabled={isPrinting}
-                >
-                  <Printer size={18} color="#FFF" style={styles.btnIconMargin} />
-                  <Text style={styles.kitchenPrintBtnText}>
-                    {isPrinting
-                      ? 'ENVIANDO A IMPRESORA...'
-                      : includePricesInTicket
-                      ? 'IMPRIMIR TICKET CON PRECIOS'
-                      : 'IMPRIMIR COMANDA (SIN PRECIOS)'}
-                  </Text>
-                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
 
-      {/* Modal de edición rápida de cantidad desde el Carrito */}
+      {/* Modal de edición de cantidad */}
       {editingItem && (
         <QuantityModal
           visible={!!editingItem}
@@ -298,14 +385,14 @@ export const CartSheet: React.FC = () => {
 const styles = StyleSheet.create({
   collapsedBar: {
     position: 'absolute',
-    bottom: 72, // Justo sobre la barra de navegación inferior
+    bottom: 72,
     left: 0,
     right: 0,
-    backgroundColor: '#ffffff', // surface-container-lowest
+    backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#ffe0ea',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -320,43 +407,70 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  collapsedBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   collapsedCountText: {
     color: '#5a3f49',
     fontSize: 11,
     fontWeight: '600',
   },
+  pendingBadge: {
+    backgroundColor: '#ffd9e5',
+    borderColor: '#b3006c',
+    borderWidth: 0.8,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  pendingBadgeText: {
+    color: '#b3006c',
+    fontSize: 9,
+    fontWeight: '800',
+  },
   collapsedTotalText: {
     color: '#27171d',
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: 'bold',
-    marginTop: 2,
+    marginTop: 1,
   },
   upArrow: {
-    marginLeft: 16,
+    marginLeft: 12,
   },
-  printBtn: {
-    backgroundColor: '#b3006c', // primary magenta
+  actionBtnHeader: {
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    gap: 6,
+  },
+  kitchenBtnActive: {
+    backgroundColor: '#b3006c',
+  },
+  kitchenBtnInactive: {
+    backgroundColor: '#ab286c',
+  },
+  payBtnHeader: {
+    backgroundColor: '#b3006c',
     borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingVertical: 9,
     gap: 6,
   },
-  printBtnDisabled: {
-    backgroundColor: '#8e6e79',
-  },
-  printIcon: {
-    marginLeft: 2,
-  },
-  printBtnText: {
+  actionBtnHeaderText: {
     color: '#FFF',
     fontWeight: 'bold',
-    fontSize: 13,
+    fontSize: 12,
+    letterSpacing: 0.3,
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(39, 27, 32, 0.4)', // backdrop-blur overlay
+    backgroundColor: 'rgba(39, 27, 32, 0.45)',
     justifyContent: 'flex-end',
   },
   sheetWrapper: {
@@ -367,7 +481,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '85%',
+    maxHeight: '88%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.15,
@@ -386,7 +500,7 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: '#ffe0ea',
     borderRadius: 2,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -399,6 +513,12 @@ const styles = StyleSheet.create({
     color: '#27171d',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  sheetSubtitle: {
+    color: '#8e6e79',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 1,
   },
   tableBadge: {
     backgroundColor: '#fff0f3',
@@ -415,47 +535,73 @@ const styles = StyleSheet.create({
   },
   itemList: {
     backgroundColor: '#fff8f8',
-    maxHeight: 280,
+    maxHeight: 270,
   },
   itemListContent: {
-    padding: 16,
+    padding: 14,
   },
   itemRow: {
     backgroundColor: '#ffffff',
     borderColor: '#ffe0ea',
     borderWidth: 1,
     borderRadius: 12,
-    padding: 12,
+    padding: 10,
     marginBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  itemInfo: {
-    flex: 1,
-    marginRight: 12,
+  itemRowPending: {
+    borderColor: '#b3006c',
+    backgroundColor: 'rgba(179, 0, 108, 0.03)',
+  },
+  itemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
   },
   itemName: {
     color: '#27171d',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
   },
+  statusTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  statusTagPending: {
+    backgroundColor: '#ffd9e5',
+  },
+  statusTagSent: {
+    backgroundColor: '#d1fae5',
+  },
+  statusTagText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  statusTagTextPending: {
+    color: '#b3006c',
+  },
+  statusTagTextSent: {
+    color: '#059669',
+  },
+  itemInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
   itemUnitText: {
-    color: '#ab286c',
+    color: '#8e6e79',
     fontSize: 11,
     marginTop: 2,
   },
-  notesInput: {
-    color: '#5a3f49',
-    fontSize: 11,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ffe0ea',
-    padding: 2,
-    marginTop: 6,
-  },
   rightControls: {
     alignItems: 'flex-end',
-    gap: 8,
+    gap: 6,
   },
   qtyContainer: {
     flexDirection: 'row',
@@ -486,38 +632,26 @@ const styles = StyleSheet.create({
   },
   itemSubtotalText: {
     color: '#27171d',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
   },
   footerContainer: {
     borderTopWidth: 1,
     borderTopColor: '#ffe0ea',
     backgroundColor: '#ffffff',
-    padding: 16,
+    padding: 14,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginVertical: 4,
-  },
-  summaryLabel: {
-    color: '#5a3f49',
-    fontSize: 13,
-  },
-  summaryValue: {
-    color: '#27171d',
-    fontSize: 13,
-    fontWeight: '600',
+    marginVertical: 2,
   },
   totalRow: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#ffe0ea',
+    marginVertical: 8,
   },
   totalLabel: {
     color: '#27171d',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
   },
   totalValue: {
@@ -525,10 +659,29 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '900',
   },
-  actionRow: {
+  kitchenSendBtn: {
+    backgroundColor: '#b3006c',
+    borderRadius: 20,
+    height: 46,
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    shadowColor: '#b3006c',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  kitchenSendBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  secondaryActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
   },
   clearBtn: {
     flexDirection: 'row',
@@ -536,18 +689,33 @@ const styles = StyleSheet.create({
     borderColor: '#e2bdc9',
     borderWidth: 1,
     borderRadius: 20,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     justifyContent: 'center',
+    height: 40,
   },
   clearBtnText: {
     color: '#ba1a1a',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
-    marginLeft: 4,
+    marginLeft: 3,
+  },
+  requestBillBtn: {
+    flex: 1.1,
+    backgroundColor: '#ea580c', // Naranja para solicitud de cuenta
+    borderRadius: 20,
+    height: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestBillBtnText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   checkoutBtn: {
     flex: 1,
-    backgroundColor: '#ab286c', // Secondary color
+    backgroundColor: '#ab286c',
     borderRadius: 20,
     height: 40,
     flexDirection: 'row',
@@ -556,25 +724,15 @@ const styles = StyleSheet.create({
   },
   checkoutBtnText: {
     color: '#FFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
   },
-  kitchenPrintBtn: {
-    backgroundColor: '#b3006c', // Primary color
-    borderRadius: 20,
-    height: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  kitchenPrintBtnText: {
-    color: '#FFF',
-    fontSize: 13,
-    fontWeight: 'bold',
+  disabledBtn: {
+    backgroundColor: '#8e6e79',
+    opacity: 0.6,
   },
   btnIconMargin: {
-    marginRight: 6,
+    marginRight: 5,
   },
   ticketConfigRow: {
     flexDirection: 'row',
@@ -583,10 +741,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff0f3',
     borderColor: '#ffe0ea',
     borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 8,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 6,
   },
   ticketConfigInfo: {
     flexDirection: 'row',
@@ -594,7 +752,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   ticketConfigLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#27171d',
   },
@@ -602,16 +760,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderColor: '#e2bdc9',
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   ticketConfigToggleActive: {
     backgroundColor: '#b3006c',
     borderColor: '#b3006c',
   },
   ticketConfigToggleText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#5a3f49',
   },

@@ -7,7 +7,6 @@ import {
   FlatList,
   TouchableOpacity,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { useCartStore, TableStatus } from '../store/useCartStore';
 import {
@@ -15,12 +14,13 @@ import {
   Coffee,
   ShoppingBag,
   CreditCard,
+  BellRing,
 } from 'lucide-react-native';
 
 const STATUS_LABELS: Record<TableStatus, string> = {
   free: 'Disponible',
   busy: 'Consumo',
-  unpaid: 'Por Cobrar',
+  bill_requested: 'Pide Cuenta',
   cleaning: 'Limpieza',
 };
 
@@ -30,8 +30,8 @@ const getCardStatusStyle = (status: TableStatus) => {
       return styles.cardStatus_free;
     case 'busy':
       return styles.cardStatus_busy;
-    case 'unpaid':
-      return styles.cardStatus_unpaid;
+    case 'bill_requested':
+      return styles.cardStatus_bill_requested;
     case 'cleaning':
       return styles.cardStatus_cleaning;
   }
@@ -43,8 +43,8 @@ const getDotStatusStyle = (status: TableStatus) => {
       return styles.dotStatus_free;
     case 'busy':
       return styles.dotStatus_busy;
-    case 'unpaid':
-      return styles.dotStatus_unpaid;
+    case 'bill_requested':
+      return styles.dotStatus_bill_requested;
     case 'cleaning':
       return styles.dotStatus_cleaning;
   }
@@ -56,8 +56,8 @@ const getSubtitleStatusStyle = (status: TableStatus) => {
       return styles.detailsSubtitle_free;
     case 'busy':
       return styles.detailsSubtitle_busy;
-    case 'unpaid':
-      return styles.detailsSubtitle_unpaid;
+    case 'bill_requested':
+      return styles.detailsSubtitle_bill_requested;
     case 'cleaning':
       return styles.detailsSubtitle_cleaning;
   }
@@ -121,8 +121,8 @@ export function TablesScreen() {
     let nextStatus: TableStatus = 'free';
 
     if (currentStatus === 'free') nextStatus = 'busy';
-    else if (currentStatus === 'busy') nextStatus = 'unpaid';
-    else if (currentStatus === 'unpaid') nextStatus = 'cleaning';
+    else if (currentStatus === 'busy') nextStatus = 'bill_requested';
+    else if (currentStatus === 'bill_requested') nextStatus = 'cleaning';
     else if (currentStatus === 'cleaning') nextStatus = 'free';
 
     setTableStatus(tableId, nextStatus);
@@ -133,6 +133,7 @@ export function TablesScreen() {
     const status = tableOrder?.status || 'free';
     const cartItems = tableOrder?.cart ? Object.values(tableOrder.cart) : [];
     const isSelected = selectedTable === tableId;
+    const isBillRequested = status === 'bill_requested';
 
     const total = cartItems.reduce(
       (sum, item) => sum + item.product.price * item.quantity,
@@ -146,6 +147,7 @@ export function TablesScreen() {
           styles.tableCard,
           getCardStatusStyle(status),
           isSelected && styles.selectedCard,
+          isBillRequested && styles.billRequestedCardPulse,
         ]}
         onPress={() => handleSelectTable(tableId)}
         activeOpacity={0.7}
@@ -165,16 +167,19 @@ export function TablesScreen() {
               <Text style={styles.busyItems}>{qtyCount} art.</Text>
             </View>
           )}
-          {status === 'unpaid' && (
-            <View>
-              <Text style={styles.unpaidTotal}>${total.toFixed(2)}</Text>
-              <Text style={styles.unpaidText}>Cobrar</Text>
+          {status === 'bill_requested' && (
+            <View style={styles.billReqBox}>
+              <View style={styles.billReqHeader}>
+                <BellRing size={12} color="#ea580c" />
+                <Text style={styles.billReqText}>Pide Cuenta</Text>
+              </View>
+              <Text style={styles.billReqTotal}>${total.toFixed(2)}</Text>
             </View>
           )}
           {status === 'cleaning' && (
             <View style={styles.cleaningRow}>
               <Clock size={12} color="#3B82F6" style={styles.cleaningIcon} />
-              <Text style={styles.cleaningText}>Sucia</Text>
+              <Text style={styles.cleaningText}>Limpieza</Text>
             </View>
           )}
         </View>
@@ -191,6 +196,7 @@ export function TablesScreen() {
     const tableOrder = tables[selectedTable];
     const cartItems = tableOrder?.cart ? Object.values(tableOrder.cart) : [];
     const status = tableOrder?.status || 'free';
+    const isBillRequested = status === 'bill_requested';
     const total = cartItems.reduce(
       (sum, item) => sum + item.product.price * item.quantity,
       0
@@ -200,7 +206,15 @@ export function TablesScreen() {
       <View style={styles.detailsPanel}>
         <View style={styles.detailsHeader}>
           <View>
-            <Text style={styles.detailsTitle}>Mesa {selectedTable}</Text>
+            <View style={styles.detailsTitleRow}>
+              <Text style={styles.detailsTitle}>Mesa {selectedTable}</Text>
+              {isBillRequested && (
+                <View style={styles.billReqBadge}>
+                  <BellRing size={12} color="#FFF" />
+                  <Text style={styles.billReqBadgeText}>SOLICITA CUENTA</Text>
+                </View>
+              )}
+            </View>
             <Text style={[styles.detailsSubtitle, getSubtitleStatusStyle(status)]}>
               Estado: {STATUS_LABELS[status]}
             </Text>
@@ -215,7 +229,7 @@ export function TablesScreen() {
             {cartItems.map(item => (
               <View key={item.product.id} style={styles.summaryItemRow}>
                 <Text style={styles.summaryItemName}>
-                  {item.quantity}x {item.product.name}
+                  {item.quantity}x {item.product.name} {item.notes ? `(${item.notes})` : ''}
                 </Text>
                 <Text style={styles.summaryItemPrice}>
                   ${(item.product.price * item.quantity).toFixed(2)}
@@ -241,11 +255,16 @@ export function TablesScreen() {
 
           {status !== 'free' && cartItems.length > 0 && (
             <TouchableOpacity
-              style={[styles.actionBtn, styles.payBtn]}
+              style={[
+                styles.actionBtn,
+                isBillRequested ? styles.payBtnHighlight : styles.payBtn,
+              ]}
               onPress={() => handleGoToPayment(selectedTable)}
             >
               <CreditCard size={16} color="#FFF" style={styles.actionBtnIcon} />
-              <Text style={styles.payBtnText}>COBRAR CUENTA</Text>
+              <Text style={styles.payBtnText}>
+                {isBillRequested ? 'COBRAR CUENTA (URGENTE)' : 'COBRAR CUENTA'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -284,8 +303,8 @@ export function TablesScreen() {
           <Text style={styles.legendText}>Consumo</Text>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.dotStatus_unpaid]} />
-          <Text style={styles.legendText}>Por Cobrar</Text>
+          <View style={[styles.legendDot, styles.dotStatus_bill_requested]} />
+          <Text style={styles.legendText}>Pide Cuenta</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.dotStatus_cleaning]} />
@@ -304,7 +323,11 @@ export function TablesScreen() {
 
       {/* Grid de Mesas */}
       <FlatList
-        data={Object.keys(tables).sort((a, b) => parseInt(a, 10) - parseInt(b, 10))}
+        data={Object.keys(tables).sort((a, b) => {
+          if (a === 'Llevar') return 1;
+          if (b === 'Llevar') return -1;
+          return parseInt(a, 10) - parseInt(b, 10);
+        })}
         renderItem={renderTableCard}
         keyExtractor={item => item}
         numColumns={3}
@@ -338,11 +361,11 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginRight: 6,
+    marginRight: 5,
   },
   legendText: {
     color: '#27171d',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   quickOrderBtn: {
@@ -352,34 +375,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffd9e5',
     borderColor: '#ffe0ea',
     borderWidth: 1,
-    margin: 12,
-    paddingVertical: 12,
+    marginHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingVertical: 10,
     borderRadius: 8,
   },
   quickOrderText: {
     color: '#b3006c',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
   },
   gridContent: {
     padding: 6,
-    paddingBottom: 260, // Espacio para el panel de detalles
+    paddingBottom: 260,
   },
   tableCard: {
     flex: 1,
-    margin: 6,
-    padding: 12,
-    borderRadius: 8,
+    margin: 5,
+    padding: 10,
+    borderRadius: 10,
     borderWidth: 1.5,
-    minHeight: 90,
+    minHeight: 92,
     justifyContent: 'space-between',
   },
   selectedCard: {
     shadowColor: '#b3006c',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 4,
+  },
+  billRequestedCardPulse: {
+    borderColor: '#ea580c',
+    backgroundColor: '#fff7ed',
+    borderWidth: 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -388,7 +418,7 @@ const styles = StyleSheet.create({
   },
   tableName: {
     color: '#27171d',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   statusDot: {
@@ -397,8 +427,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   cardBody: {
-    marginTop: 8,
-    height: 40,
+    marginTop: 6,
+    minHeight: 36,
     justifyContent: 'center',
   },
   freeText: {
@@ -408,22 +438,30 @@ const styles = StyleSheet.create({
   },
   busyTotal: {
     color: '#27171d',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
   },
   busyItems: {
     color: '#5a3f49',
     fontSize: 11,
   },
-  unpaidTotal: {
-    color: '#ba1a1a',
-    fontSize: 16,
-    fontWeight: 'bold',
+  billReqBox: {
+    gap: 1,
   },
-  unpaidText: {
-    color: '#ba1a1a',
-    fontSize: 11,
-    fontWeight: '600',
+  billReqHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  billReqText: {
+    color: '#ea580c',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  billReqTotal: {
+    color: '#ea580c',
+    fontSize: 14,
+    fontWeight: '900',
   },
   cleaningRow: {
     flexDirection: 'row',
@@ -438,7 +476,7 @@ const styles = StyleSheet.create({
     color: '#8e6e79',
     fontSize: 9,
     textAlign: 'right',
-    marginTop: 4,
+    marginTop: 2,
   },
   detailsPanel: {
     position: 'absolute',
@@ -464,19 +502,38 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ffe0ea',
     paddingBottom: 8,
   },
+  detailsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   detailsTitle: {
     color: '#27171d',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
   },
+  billReqBadge: {
+    backgroundColor: '#ea580c',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  billReqBadgeText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
   detailsSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     marginTop: 2,
   },
   detailsTotal: {
     color: '#b3006c',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 'bold',
   },
   itemsSummaryList: {
@@ -486,16 +543,18 @@ const styles = StyleSheet.create({
   summaryItemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
   summaryItemName: {
     color: '#5a3f49',
-    fontSize: 13,
+    fontSize: 12,
+    flex: 1,
+    marginRight: 8,
   },
   summaryItemPrice: {
     color: '#27171d',
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
   },
   emptyDetails: {
     alignItems: 'center',
@@ -505,7 +564,7 @@ const styles = StyleSheet.create({
   },
   emptyDetailsText: {
     color: '#8e6e79',
-    fontSize: 13,
+    fontSize: 12,
   },
   actionsGrid: {
     flexDirection: 'row',
@@ -525,21 +584,24 @@ const styles = StyleSheet.create({
   },
   orderBtnText: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
   },
   payBtn: {
     backgroundColor: '#ab286c',
   },
+  payBtnHighlight: {
+    backgroundColor: '#ea580c',
+  },
   payBtnText: {
     color: '#FFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 'bold',
   },
   utilityActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 10,
+    marginTop: 8,
   },
   utilityBtn: {
     paddingVertical: 4,
@@ -547,17 +609,17 @@ const styles = StyleSheet.create({
   },
   utilityBtnText: {
     color: '#5a3f49',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
   },
   deleteBtn: {
     backgroundColor: 'rgba(186, 26, 26, 0.08)',
     borderRadius: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   deleteBtnText: {
     color: '#ba1a1a',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   cardStatus_free: {
@@ -568,9 +630,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff0f3',
     borderColor: '#b3006c',
   },
-  cardStatus_unpaid: {
-    backgroundColor: '#ffd9e5',
-    borderColor: '#ba1a1a',
+  cardStatus_bill_requested: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#ea580c',
   },
   cardStatus_cleaning: {
     backgroundColor: '#fff8f8',
@@ -582,8 +644,8 @@ const styles = StyleSheet.create({
   dotStatus_busy: {
     backgroundColor: '#EAB308',
   },
-  dotStatus_unpaid: {
-    backgroundColor: '#EF4444',
+  dotStatus_bill_requested: {
+    backgroundColor: '#ea580c',
   },
   dotStatus_cleaning: {
     backgroundColor: '#3B82F6',
@@ -594,8 +656,8 @@ const styles = StyleSheet.create({
   detailsSubtitle_busy: {
     color: '#EAB308',
   },
-  detailsSubtitle_unpaid: {
-    color: '#ba1a1a',
+  detailsSubtitle_bill_requested: {
+    color: '#ea580c',
   },
   detailsSubtitle_cleaning: {
     color: '#3B82F6',
@@ -604,9 +666,9 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   actionBtnIcon: {
-    marginRight: 6,
+    marginRight: 5,
   },
   quickOrderIcon: {
-    marginRight: 8,
+    marginRight: 6,
   },
 });

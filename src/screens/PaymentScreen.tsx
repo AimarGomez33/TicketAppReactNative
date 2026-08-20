@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { useCartStore } from '../store/useCartStore';
 import {
@@ -39,12 +38,9 @@ export function PaymentScreen() {
   const [receivedCashStr, setReceivedCashStr] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // El total a cobrar es la suma directa de los consumos
   const total = getTotal();
-
   const items = Object.values(cart);
 
-  // Si cambiamos el método de pago a tarjeta o transferencia, autocompletamos con el total exacto
   useEffect(() => {
     if (paymentMethod !== 'cash') {
       setReceivedCashStr(total.toFixed(2));
@@ -59,7 +55,7 @@ export function PaymentScreen() {
         <XCircle size={48} color="#ba1a1a" />
         <Text style={styles.emptyTitle}>Sin Mesa Seleccionada</Text>
         <Text style={styles.emptyText}>
-          No hay una cuenta activa para cobrar. Selecciona una mesa ocupada desde la vista de mesas.
+          No hay una cuenta activa para cobrar. Selecciona una mesa con consumo desde la vista de mesas.
         </Text>
         <TouchableOpacity
           style={styles.backButton}
@@ -106,7 +102,7 @@ export function PaymentScreen() {
       showCustomAlert({
         type: 'error',
         title: 'Monto Insuficiente',
-        message: `El dinero recibido ($${receivedCash.toFixed(2)}) es menor que el total ($${total.toFixed(2)}).`,
+        message: `El dinero recibido ($${receivedCash.toFixed(2)}) es menor que el total a cobrar ($${total.toFixed(2)}).`,
         confirmText: 'Entendido',
       });
       return;
@@ -114,14 +110,21 @@ export function PaymentScreen() {
 
     setIsProcessing(true);
     try {
+      // Imprimir ticket con desglose de precios unitarios y método de pago
       await printTicketTCP(tableNumber, items, total, {
-        showPrices: includePricesInTicket,
+        showPrices: true,
+        isKitchenComanda: false,
+        paymentMethod,
+        amountPaid: receivedCash,
+        change,
       });
-      completePayment(paymentMethod, receivedCash, change);
+
+      await completePayment(paymentMethod, receivedCash, change);
+
       showCustomAlert({
         type: 'printer',
-        title: '¡Pago Exitoso!',
-        message: `La cuenta de la Mesa ${tableNumber} se ha cerrado y el ticket ha sido impreso correctamente.`,
+        title: '¡Cobro Exitoso!',
+        message: `La cuenta de la Mesa ${tableNumber} se ha cerrado, el ticket se ha impreso y la mesa ha pasado a limpieza.`,
         confirmText: 'Volver a Mesas',
         onConfirm: () => {
           setActiveTab('tables');
@@ -130,12 +133,12 @@ export function PaymentScreen() {
     } catch (error: any) {
       showCustomAlert({
         type: 'error',
-        title: 'Error de Impresora',
-        message: `No se pudo conectar con la impresora térmica (${error.message || '192.168.100.200'}). ¿Deseas cerrar la cuenta sin ticket físico?`,
+        title: 'Aviso de Impresora',
+        message: `No se pudo conectar con la impresora (${error.message || '192.168.100.200'}). ¿Deseas cerrar la cuenta en el sistema sin ticket físico?`,
         confirmText: 'Cerrar sin Imprimir',
         cancelText: 'Cancelar',
-        onConfirm: () => {
-          completePayment(paymentMethod, receivedCash, change);
+        onConfirm: async () => {
+          await completePayment(paymentMethod, receivedCash, change);
           setActiveTab('tables');
         },
       });
@@ -146,7 +149,7 @@ export function PaymentScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Botón Volver */}
+      {/* Encabezado */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backHeaderBtn}
@@ -159,19 +162,19 @@ export function PaymentScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Resumen de la Orden */}
+        {/* Resumen de Cuenta con Precios Unitarios */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Resumen de Cuenta</Text>
+          <Text style={styles.cardTitle}>Resumen de Consumo</Text>
           <View style={styles.itemsList}>
-            {items.map(({ product, quantity, notes }) => (
+            {items.map(({ product, quantity, notes, round }) => (
               <View key={product.id} style={styles.itemRow}>
                 <View style={styles.itemInfo}>
                   <Text style={styles.itemName}>
                     {quantity}x {product.name}
                   </Text>
-                  {notes ? (
-                    <Text style={styles.itemNotes}>* {notes}</Text>
-                  ) : null}
+                  <Text style={styles.itemUnitPriceText}>
+                    ${product.price.toFixed(2)} c/u {notes ? `• 📝 ${notes}` : ''} {round ? `• R#${round}` : ''}
+                  </Text>
                 </View>
                 <Text style={styles.itemPrice}>
                   ${(product.price * quantity).toFixed(2)}
@@ -189,7 +192,7 @@ export function PaymentScreen() {
             <View style={styles.ticketConfigInfo}>
               <Tag size={14} color="#b3006c" />
               <Text style={styles.ticketConfigLabel}>
-                Ticket: {includePricesInTicket ? 'Con Precios' : 'Sin Precios'}
+                Ticket Cliente: {includePricesInTicket ? 'Con Precios Unitarios' : 'Sin Precios'}
               </Text>
             </View>
             <TouchableOpacity
@@ -206,7 +209,7 @@ export function PaymentScreen() {
                   includePricesInTicket && styles.ticketConfigToggleTextActive,
                 ]}
               >
-                {includePricesInTicket ? 'Precios: SÍ' : 'Precios: NO'}
+                {includePricesInTicket ? 'SÍ' : 'NO'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -290,7 +293,7 @@ export function PaymentScreen() {
                 </Text>
               </View>
               <View style={styles.cashSumBox}>
-                <Text style={styles.cashSumLabel}>Cambio</Text>
+                <Text style={styles.cashSumLabel}>Cambio a Regresar</Text>
                 <Text
                   style={[
                     styles.cashSumValue,
@@ -381,10 +384,10 @@ export function PaymentScreen() {
         ) : (
           <View style={styles.cardInfoContainer}>
             <Text style={styles.cardInfoText}>
-              Pago por {paymentMethod === 'card' ? 'Terminal de Tarjeta' : 'Transferencia Electrónica'}.
+              Cobro mediante {paymentMethod === 'card' ? 'Terminal de Tarjeta' : 'Transferencia Electrónica'}.
             </Text>
             <Text style={styles.cardInfoSubText}>
-              Verifica que el monto de ${total.toFixed(2)} haya sido aprobado antes de finalizar.
+              Confirma que la transacción de ${total.toFixed(2)} fue exitosa antes de cerrar la comanda.
             </Text>
           </View>
         )}
@@ -401,7 +404,7 @@ export function PaymentScreen() {
         >
           <Printer size={18} color="#FFF" style={styles.processBtnIcon} />
           <Text style={styles.processBtnText}>
-            {isProcessing ? 'PROCESANDO...' : 'CERRAR Y ENVIAR TICKET'}
+            {isProcessing ? 'CERRANDO Y ENVIANDO TICKET...' : 'COBRAR E IMPRIMIR TICKET'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -500,32 +503,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   itemName: {
-    color: '#5a3f49',
+    color: '#27171d',
     fontSize: 13,
+    fontWeight: '700',
   },
-  itemNotes: {
-    color: '#EAB308',
+  itemUnitPriceText: {
+    color: '#8e6e79',
     fontSize: 11,
-    marginLeft: 8,
     marginTop: 2,
   },
   itemPrice: {
     color: '#27171d',
     fontSize: 13,
-    fontWeight: '500',
-  },
-  subtotalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  subtotalLabel: {
-    color: '#5a3f49',
-    fontSize: 12,
-  },
-  subtotalValue: {
-    color: '#27171d',
-    fontSize: 12,
     fontWeight: '600',
   },
   totalRow: {
@@ -715,7 +704,7 @@ const styles = StyleSheet.create({
   },
   processBtnText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 'bold',
     letterSpacing: 0.5,
   },
@@ -746,7 +735,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   ticketConfigLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#27171d',
   },

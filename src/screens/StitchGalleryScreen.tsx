@@ -1,12 +1,12 @@
 // src/screens/StitchGalleryScreen.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { OrderingScreen } from './OrderingScreen';
 import { PaymentScreen } from './PaymentScreen';
 import { TablesScreen } from './TablesScreen';
 import { useCartStore } from '../store/useCartStore';
-import { Table, UtensilsCrossed, CreditCard, Sparkles } from 'lucide-react-native';
+import { Table, UtensilsCrossed, CreditCard, Sparkles, Radio } from 'lucide-react-native';
 import { CustomAlertModal } from '../components/CustomAlertModal';
 
 type ScreenId = 'tables' | 'ordering' | 'payment';
@@ -22,24 +22,45 @@ export function StitchGalleryScreen() {
   const setSelectedScreen = useCartStore(state => state.setActiveTab);
   const appMode = useCartStore(state => state.appMode);
   const setAppMode = useCartStore(state => state.setAppMode);
+  const initRealtimeSync = useCartStore(state => state.initRealtimeSync);
+  const isRealtimeConnected = useCartStore(state => state.isRealtimeConnected);
+
+  useEffect(() => {
+    initRealtimeSync();
+  }, [initRealtimeSync]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      {/* Header principal */}
+      {/* Header principal responsive */}
       <View style={styles.header}>
         <View style={styles.headerMain}>
-          <View>
-            <Text style={styles.eyebrow}>SISTEMA DE PUNTO DE VENTA (POS)</Text>
-            <Text style={styles.title}>Antojitos Mexicanos Margarita</Text>
+          <View style={styles.headerTitleContainer}>
+            <View style={styles.titleRow}>
+              <Text style={styles.eyebrow} numberOfLines={1}>POS MARGARITA</Text>
+              {isRealtimeConnected ? (
+                <View style={styles.liveBadge}>
+                  <Radio size={9} color="#059669" />
+                  <Text style={styles.liveBadgeText}>EN VIVO</Text>
+                </View>
+              ) : (
+                <View style={styles.offlineBadge}>
+                  <Text style={styles.offlineBadgeText}>LOCAL</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
+              Antojitos Mexicanos Margarita
+            </Text>
           </View>
+
           <TouchableOpacity
             style={styles.headerModeBadge}
             onPress={() => setAppMode(appMode === 'general' ? 'detailed' : 'general')}
             activeOpacity={0.7}
           >
-            <Sparkles size={12} color="#b3006c" />
-            <Text style={styles.headerModeBadgeText}>
-              {appMode === 'general' ? 'Modo General' : 'Modo Detallado'}
+            <Sparkles size={11} color="#b3006c" />
+            <Text style={styles.headerModeBadgeText} numberOfLines={1}>
+              {appMode === 'general' ? 'General' : 'Detallado'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -101,8 +122,8 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#ffe8ee',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#ffe0ea',
   },
@@ -110,6 +131,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    marginRight: 6,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#d1fae5',
+    borderColor: '#a7f3d0',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  liveBadgeText: {
+    color: '#059669',
+    fontSize: 8,
+    fontWeight: '800',
+  },
+  offlineBadge: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  offlineBadgeText: {
+    color: '#6b7280',
+    fontSize: 8,
+    fontWeight: '800',
   },
   headerModeBadge: {
     flexDirection: 'row',
@@ -119,11 +179,11 @@ const styles = StyleSheet.create({
     borderColor: '#ffe0ea',
     borderWidth: 1,
     borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     shadowColor: '#b3006c',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 1,
   },
@@ -131,19 +191,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: '#b3006c',
-    letterSpacing: 0.2,
   },
   eyebrow: {
     color: '#5a3f49',
     fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
   },
   title: {
     color: '#27171d',
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: '800',
-    marginTop: 2,
+    marginTop: 1,
   },
   contentContainer: {
     flex: 1,

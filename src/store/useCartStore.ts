@@ -1,5 +1,17 @@
 // src/store/useCartStore.ts
 import { create } from 'zustand';
+import {
+  fetchRemoteTables,
+  fetchActiveOrderItems,
+  syncActiveOrderToSupabase,
+  markRoundSentInSupabase,
+  requestBillInSupabase,
+  finalizePaymentInSupabase,
+  clearTableInSupabase,
+  subscribeToRealtimeChanges,
+  RemoteTableUpdate,
+} from '../services/supabaseService';
+import { isSupabaseConfigured } from '../config/supabaseConfig';
 
 export interface Product {
   id: string;
@@ -9,18 +21,25 @@ export interface Product {
   description?: string;
 }
 
+export type ItemKitchenStatus = 'pending' | 'sent_to_kitchen';
+
 export interface CartItem {
   product: Product;
   quantity: number;
-  notes?: string; // Modificadores como "sin cebolla", "doble queso"
+  notes?: string; // Modificadores: "sin cebolla", "doble queso"
+  round?: number; // Número de ronda (1, 2, 3...)
+  status?: ItemKitchenStatus; // 'pending' = Por preparar, 'sent_to_kitchen' = Enviado
+  dbId?: string;
 }
 
-export type TableStatus = 'free' | 'busy' | 'unpaid' | 'cleaning';
+export type TableStatus = 'free' | 'busy' | 'bill_requested' | 'cleaning';
 
 export interface TableOrder {
   status: TableStatus;
   cart: Record<string, CartItem>;
+  currentRound?: number;
   lastUpdated?: string;
+  waiterName?: string;
 }
 
 export interface OrderHistoryItem {
@@ -48,24 +67,26 @@ export interface CustomAlertData {
 
 interface CartState {
   tableNumber: string; // Mesa activa seleccionada
-  cart: Record<string, CartItem>; // Carrito de la mesa activa (para compatibilidad O(1))
-  tables: Record<string, TableOrder>; // Estado de todas las mesas del restaurante
-  ordersHistory: OrderHistoryItem[]; // Historial de pagos
+  cart: Record<string, CartItem>; // Carrito de la mesa activa
+  tables: Record<string, TableOrder>; // Estado de todas las mesas
+  ordersHistory: OrderHistoryItem[]; // Historial local de pagos
   
   activeTab: 'tables' | 'ordering' | 'payment'; // Pantalla/Tab activa global
   
-  // Modo de versión de la app
   appMode: AppVersionMode; // 'general' = versión simplificada, 'detailed' = versión detallada
   includePricesInTicket: boolean; // Controla si se imprimen los precios en el ticket
-  customAlert: CustomAlertData | null; // Estado del alert estilizado global
+  customAlert: CustomAlertData | null; // Alert estilizado global
+  isRealtimeConnected: boolean;
 
-  // Acciones
+  // Acciones de UI / Modos
   setAppMode: (mode: AppVersionMode) => void;
   setIncludePricesInTicket: (include: boolean) => void;
   showCustomAlert: (alert: CustomAlertData) => void;
   hideCustomAlert: () => void;
-
   setActiveTab: (tab: 'tables' | 'ordering' | 'payment') => void;
+  setRealtimeConnected: (connected: boolean) => void;
+
+  // Acciones de Comanda Local y Sincronizada
   setTableNumber: (table: string) => void;
   setTableStatus: (table: string, status: TableStatus) => void;
   addItem: (product: Product, notes?: string) => void;
@@ -76,17 +97,42 @@ interface CartState {
   clearCart: () => void;
   getTotal: () => number;
   getItemCount: () => number;
-  completePayment: (paymentMethod: 'cash' | 'card' | 'transfer', amountPaid: number, change: number) => void;
+  getPendingItemsCount: () => number;
+  getCurrentTableRound: () => number;
+
+  // Flujo Mesero -> Cocina / Rondas
+  sendRoundToKitchen: (tableNumber?: string) => Promise<boolean>;
+  requestBillForTable: (tableNumber?: string) => Promise<boolean>;
+
+  // Flujo Operador -> Cobro
+  completePayment: (paymentMethod: 'cash' | 'card' | 'transfer', amountPaid: number, change: number) => Promise<void>;
+  
+  // Inicialización y Sincronización Supabase
   initializeTables: () => void;
+  initRealtimeSync: () => void;
+  loadTableCartFromRemote: (tableNumber: string) => Promise<void>;
 }
 
-// Inicialización de 12 mesas estándar
+// Inicialización de 12 mesas estándar + orden rápida
 const initialTables = (): Record<string, TableOrder> => {
   const t: Record<string, TableOrder> = {};
   for (let i = 1; i <= 12; i++) {
-    t[i.toString()] = { status: 'free', cart: {} };
+    t[i.toString()] = { status: 'free', cart: {}, currentRound: 1 };
   }
+  t['Llevar'] = { status: 'free', cart: {}, currentRound: 1 };
   return t;
+};
+
+// Helper con debounce para evitar llamadas masivas simultáneas a Supabase
+let syncTimeoutId: any = null;
+const debouncedSync = (tableNumber: string, items: CartItem[], total: number, waiterName?: string) => {
+  if (!isSupabaseConfigured() || !tableNumber) return;
+  if (syncTimeoutId) {
+    clearTimeout(syncTimeoutId);
+  }
+  syncTimeoutId = setTimeout(() => {
+    syncActiveOrderToSupabase(tableNumber, items, total, waiterName);
+  }, 350);
 };
 
 export const useCartStore = create<CartState>((set, get) => ({
@@ -98,11 +144,9 @@ export const useCartStore = create<CartState>((set, get) => ({
   appMode: 'general',
   includePricesInTicket: true,
   customAlert: null,
+  isRealtimeConnected: false,
 
   setAppMode: (appMode) => {
-    // Al cambiar de modo:
-    // - 'general': ticket intacto con precios (includePricesInTicket = true)
-    // - 'detailed': elimina precios de tickets salvo requerimiento (includePricesInTicket = false)
     set({
       appMode,
       includePricesInTicket: appMode === 'general',
@@ -110,57 +154,163 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   setIncludePricesInTicket: (includePricesInTicket) => set({ includePricesInTicket }),
-
   showCustomAlert: (customAlert) => set({ customAlert }),
-
   hideCustomAlert: () => set({ customAlert: null }),
-
   setActiveTab: (activeTab) => set({ activeTab }),
+  setRealtimeConnected: (isRealtimeConnected) => set({ isRealtimeConnected }),
 
-  // Inicializar mesas si es necesario
   initializeTables: () => {
     if (Object.keys(get().tables).length === 0) {
       set({ tables: initialTables() });
     }
   },
 
-  // Seleccionar o cambiar mesa activa
-  setTableNumber: (tableNumber) =>
-    set((state) => {
-      // 1. Guardar el carrito activo actual en la mesa anterior (si existía)
-      const prevTable = state.tableNumber;
-      const updatedTables = { ...state.tables };
+  // Inicializar suscripción y carga en tiempo real desde Supabase
+  initRealtimeSync: () => {
+    if (!isSupabaseConfigured()) {
+      return;
+    }
 
-      if (prevTable) {
-        const prevCartCount = Object.keys(state.cart).length;
-        // Si hay items, se marca como busy, si no, se queda en free (o mantiene su estado)
-        const prevStatus = updatedTables[prevTable]?.status || 'free';
-        const newStatus = prevCartCount > 0 ? 'busy' : (prevStatus === 'busy' ? 'free' : prevStatus);
+    // 1. Cargar estado inicial
+    fetchRemoteTables().then((remoteTables) => {
+      if (remoteTables) {
+        set((state) => {
+          const updated = { ...state.tables };
+          Object.keys(remoteTables).forEach((tblNum) => {
+            if (updated[tblNum]) {
+              updated[tblNum] = {
+                ...updated[tblNum],
+                status: remoteTables[tblNum].status,
+                lastUpdated: remoteTables[tblNum].lastUpdated || updated[tblNum].lastUpdated,
+              };
+            } else {
+              updated[tblNum] = {
+                status: remoteTables[tblNum].status,
+                cart: {},
+                currentRound: 1,
+                lastUpdated: remoteTables[tblNum].lastUpdated,
+              };
+            }
+          });
+          return { tables: updated, isRealtimeConnected: true };
+        });
+      }
+    });
+
+    // 2. Suscribirse a cambios en tiempo real
+    subscribeToRealtimeChanges(
+      (tableUpdate: RemoteTableUpdate) => {
+        set((state) => {
+          const updatedTables = { ...state.tables };
+          const tbl = tableUpdate.tableNumber;
+          const currentTableOrder = updatedTables[tbl] || { status: 'free', cart: {}, currentRound: 1 };
+
+          updatedTables[tbl] = {
+            ...currentTableOrder,
+            status: tableUpdate.status,
+            lastUpdated: tableUpdate.lastUpdated || new Date().toLocaleTimeString(),
+            waiterName: tableUpdate.waiterName || currentTableOrder.waiterName,
+          };
+
+          // Si una mesa se libera o limpia remotamente y es la mesa activa, limpiar comanda
+          let updatedCart = state.cart;
+          if (state.tableNumber === tbl && (tableUpdate.status === 'free' || tableUpdate.status === 'cleaning')) {
+            if (tableUpdate.status === 'free') {
+              updatedCart = {};
+            }
+          }
+
+          return {
+            tables: updatedTables,
+            cart: updatedCart,
+            isRealtimeConnected: true,
+          };
+        });
+      },
+      (orderUpdate) => {
+        // Manejar actualización de órdenes si es necesario
+      }
+    );
+  },
+
+  // Cargar comanda remota de una mesa específica
+  loadTableCartFromRemote: async (tableNumber: string) => {
+    if (!tableNumber || !isSupabaseConfigured()) return;
+    const res = await fetchActiveOrderItems(tableNumber);
+    if (res && res.items) {
+      const cartRecord: Record<string, CartItem> = {};
+      let maxRound = 1;
+
+      res.items.forEach((it) => {
+        cartRecord[it.product.id] = it;
+        if (it.round && it.round > maxRound) {
+          maxRound = it.round;
+        }
+      });
+
+      set((state) => {
+        const updatedTables = { ...state.tables };
+        const localTableCart = state.tableNumber === tableNumber ? state.cart : (updatedTables[tableNumber]?.cart || {});
         
-        updatedTables[prevTable] = {
-          status: newStatus,
-          cart: state.cart,
-          lastUpdated: new Date().toLocaleTimeString(),
+        // Si el usuario ya está agregando ítems localmente y el servidor devolvió vacío, preservar los locales
+        const finalCart = Object.keys(localTableCart).length > 0 && Object.keys(cartRecord).length === 0
+          ? localTableCart
+          : (Object.keys(cartRecord).length > 0 ? cartRecord : localTableCart);
+
+        if (updatedTables[tableNumber]) {
+          updatedTables[tableNumber] = {
+            ...updatedTables[tableNumber],
+            cart: finalCart,
+            currentRound: maxRound,
+          };
+        }
+        return {
+          tables: updatedTables,
+          cart: state.tableNumber === tableNumber ? finalCart : state.cart,
         };
-      }
+      });
+    }
+  },
 
-      // 2. Cargar el carrito de la nueva mesa
-      const nextTableOrder = updatedTables[tableNumber];
-      const nextCart = nextTableOrder ? nextTableOrder.cart : {};
-      
-      // Si la nueva mesa no existe en el mapa (ej. orden manual para llevar), la creamos
-      if (tableNumber && !updatedTables[tableNumber]) {
-        updatedTables[tableNumber] = { status: 'free', cart: {} };
-      }
+  // Cambiar mesa activa
+  setTableNumber: (tableNumber) => {
+    const state = get();
+    const prevTable = state.tableNumber;
+    const updatedTables = { ...state.tables };
 
-      return {
-        tableNumber,
-        cart: nextCart,
-        tables: updatedTables,
+    // Guardar estado de mesa anterior si existía
+    if (prevTable) {
+      const prevCart = state.cart;
+      const hasItems = Object.keys(prevCart).length > 0;
+      const prevStatus = updatedTables[prevTable]?.status || 'free';
+      const newStatus = hasItems ? (prevStatus === 'bill_requested' ? 'bill_requested' : 'busy') : (prevStatus === 'busy' ? 'free' : prevStatus);
+
+      updatedTables[prevTable] = {
+        ...(updatedTables[prevTable] || { status: 'free', currentRound: 1 }),
+        status: newStatus,
+        cart: prevCart,
+        lastUpdated: new Date().toLocaleTimeString(),
       };
-    }),
+    }
 
-  // Cambiar el estado de una mesa manualmente
+    // Cargar carrito de la nueva mesa
+    const nextTableOrder = updatedTables[tableNumber] || { status: 'free', cart: {}, currentRound: 1 };
+    if (tableNumber && !updatedTables[tableNumber]) {
+      updatedTables[tableNumber] = { status: 'free', cart: {}, currentRound: 1 };
+    }
+
+    set({
+      tableNumber,
+      cart: nextTableOrder.cart || {},
+      tables: updatedTables,
+    });
+
+    // Intentar sincronizar desde Supabase si está disponible
+    if (tableNumber && isSupabaseConfigured()) {
+      get().loadTableCartFromRemote(tableNumber);
+    }
+  },
+
   setTableStatus: (table, status) =>
     set((state) => {
       const updatedTables = { ...state.tables };
@@ -173,31 +323,45 @@ export const useCartStore = create<CartState>((set, get) => ({
       return { tables: updatedTables };
     }),
 
-  // Agregar +1 unidad de un producto a la mesa activa
-  addItem: (product, notes) =>
-    get().addQuantity(product, 1, notes),
+  // Agregar 1 unidad
+  addItem: (product, notes) => get().addQuantity(product, 1, notes),
 
-  // Agregar N unidades de un producto a la mesa activa
+  // Agregar N unidades (nuevos platillos entran como 'pending' con la ronda activa)
   addQuantity: (product, quantityToAdd, notes) =>
     set((state) => {
       if (quantityToAdd <= 0) return state;
       const existing = state.cart[product.id];
       const currentQty = existing ? existing.quantity : 0;
       const mergedNotes = notes !== undefined ? notes : (existing?.notes || '');
+      const activeRound = state.tables[state.tableNumber]?.currentRound || 1;
 
-      const updatedCart = {
+      // Si el ítem ya existía y estaba enviado, los extras se marcan como pendiente
+      const updatedCart: Record<string, CartItem> = {
         ...state.cart,
-        [product.id]: { product, quantity: currentQty + quantityToAdd, notes: mergedNotes },
+        [product.id]: {
+          product,
+          quantity: currentQty + quantityToAdd,
+          notes: mergedNotes,
+          round: activeRound,
+          status: 'pending', // Marca como pendiente para la comanda de cocina
+        },
       };
 
-      // Sincronizar en el mapa de mesas también
       const updatedTables = { ...state.tables };
       if (state.tableNumber) {
+        const prevStatus = updatedTables[state.tableNumber]?.status;
         updatedTables[state.tableNumber] = {
-          status: 'busy',
+          ...(updatedTables[state.tableNumber] || { currentRound: 1 }),
+          status: prevStatus === 'bill_requested' ? 'bill_requested' : 'busy',
           cart: updatedCart,
           lastUpdated: new Date().toLocaleTimeString(),
         };
+
+        // Sincronizar en segundo plano con Supabase con debounce
+        if (isSupabaseConfigured()) {
+          const total = Object.values(updatedCart).reduce((s, it) => s + it.product.price * it.quantity, 0);
+          debouncedSync(state.tableNumber, Object.values(updatedCart), total);
+        }
       }
 
       return {
@@ -206,28 +370,40 @@ export const useCartStore = create<CartState>((set, get) => ({
       };
     }),
 
-  // Establecer cantidad exacta de un producto
+  // Establecer cantidad exacta
   setQuantity: (product, quantity, notes) =>
     set((state) => {
       const existing = state.cart[product.id];
       const mergedNotes = notes !== undefined ? notes : (existing?.notes || '');
       const updatedCart = { ...state.cart };
+      const activeRound = state.tables[state.tableNumber]?.currentRound || 1;
 
       if (quantity > 0) {
-        updatedCart[product.id] = { product, quantity, notes: mergedNotes };
+        updatedCart[product.id] = {
+          product,
+          quantity,
+          notes: mergedNotes,
+          round: existing?.round || activeRound,
+          status: existing?.status || 'pending',
+        };
       } else {
         delete updatedCart[product.id];
       }
 
-      // Sincronizar en el mapa de mesas también
       const updatedTables = { ...state.tables };
       if (state.tableNumber) {
         const hasItems = Object.keys(updatedCart).length > 0;
         updatedTables[state.tableNumber] = {
+          ...(updatedTables[state.tableNumber] || { currentRound: 1 }),
           status: hasItems ? 'busy' : 'free',
           cart: updatedCart,
           lastUpdated: new Date().toLocaleTimeString(),
         };
+
+        if (isSupabaseConfigured()) {
+          const total = Object.values(updatedCart).reduce((s, it) => s + it.product.price * it.quantity, 0);
+          debouncedSync(state.tableNumber, Object.values(updatedCart), total);
+        }
       }
 
       return {
@@ -236,7 +412,6 @@ export const useCartStore = create<CartState>((set, get) => ({
       };
     }),
 
-  // Restar -1 unidad de un producto de la mesa activa
   removeItem: (productId) =>
     set((state) => {
       const existing = state.cart[productId];
@@ -252,15 +427,20 @@ export const useCartStore = create<CartState>((set, get) => ({
         delete updatedCart[productId];
       }
 
-      // Sincronizar en el mapa de mesas también
       const updatedTables = { ...state.tables };
       if (state.tableNumber) {
         const hasItems = Object.keys(updatedCart).length > 0;
         updatedTables[state.tableNumber] = {
+          ...(updatedTables[state.tableNumber] || { currentRound: 1 }),
           status: hasItems ? 'busy' : 'free',
           cart: updatedCart,
           lastUpdated: new Date().toLocaleTimeString(),
         };
+
+        if (isSupabaseConfigured()) {
+          const total = Object.values(updatedCart).reduce((s, it) => s + it.product.price * it.quantity, 0);
+          debouncedSync(state.tableNumber, Object.values(updatedCart), total);
+        }
       }
 
       return {
@@ -269,7 +449,6 @@ export const useCartStore = create<CartState>((set, get) => ({
       };
     }),
 
-  // Actualizar las notas/modificadores de un producto
   updateItemNotes: (productId, notes) =>
     set((state) => {
       const existing = state.cart[productId];
@@ -294,14 +473,20 @@ export const useCartStore = create<CartState>((set, get) => ({
       };
     }),
 
-  // Limpiar la mesa activa actual
-  clearCart: () =>
-    set((state) => {
-      const updatedTables = { ...state.tables };
-      if (state.tableNumber) {
-        updatedTables[state.tableNumber] = {
+  clearCart: () => {
+    const state = get();
+    const activeTable = state.tableNumber;
+    if (activeTable && isSupabaseConfigured()) {
+      clearTableInSupabase(activeTable);
+    }
+
+    set((prev) => {
+      const updatedTables = { ...prev.tables };
+      if (activeTable) {
+        updatedTables[activeTable] = {
           status: 'free',
           cart: {},
+          currentRound: 1,
           lastUpdated: new Date().toLocaleTimeString(),
         };
       }
@@ -309,9 +494,9 @@ export const useCartStore = create<CartState>((set, get) => ({
         cart: {},
         tables: updatedTables,
       };
-    }),
+    });
+  },
 
-  // Calcular el total monetario del carrito activo
   getTotal: () => {
     const cart = get().cart;
     return Object.values(cart).reduce(
@@ -320,14 +505,91 @@ export const useCartStore = create<CartState>((set, get) => ({
     );
   },
 
-  // Obtener la cantidad de ítems totales del carrito activo
   getItemCount: () => {
     const cart = get().cart;
     return Object.values(cart).reduce((sum, item) => sum + item.quantity, 0);
   },
 
-  // Registrar un pago, archivar la orden y liberar la mesa
-  completePayment: (paymentMethod, amountPaid, change) => {
+  getPendingItemsCount: () => {
+    const cart = get().cart;
+    return Object.values(cart).filter((it) => it.status === 'pending').reduce((sum, item) => sum + item.quantity, 0);
+  },
+
+  getCurrentTableRound: () => {
+    const state = get();
+    return state.tables[state.tableNumber]?.currentRound || 1;
+  },
+
+  // Flujo 1: Enviar ronda a cocina -> Marca los pendientes como 'sent_to_kitchen' e incrementa la ronda
+  sendRoundToKitchen: async (tbl) => {
+    const state = get();
+    const tableToUse = tbl || state.tableNumber;
+    if (!tableToUse) return false;
+
+    const currentTableOrder = state.tables[tableToUse];
+    const currentRound = currentTableOrder?.currentRound || 1;
+    const nextRound = currentRound + 1;
+
+    // Actualizar todos los ítems del carrito local como 'sent_to_kitchen'
+    const updatedCart: Record<string, CartItem> = {};
+    Object.values(state.cart).forEach((item) => {
+      updatedCart[item.product.id] = {
+        ...item,
+        status: 'sent_to_kitchen',
+        round: item.round || currentRound,
+      };
+    });
+
+    set((prev) => {
+      const updatedTables = { ...prev.tables };
+      updatedTables[tableToUse] = {
+        ...(updatedTables[tableToUse] || { status: 'busy' }),
+        status: 'busy',
+        cart: updatedCart,
+        currentRound: nextRound,
+        lastUpdated: new Date().toLocaleTimeString(),
+      };
+
+      return {
+        cart: prev.tableNumber === tableToUse ? updatedCart : prev.cart,
+        tables: updatedTables,
+      };
+    });
+
+    if (isSupabaseConfigured()) {
+      await markRoundSentInSupabase(tableToUse, currentRound);
+    }
+
+    return true;
+  },
+
+  // Flujo 2: Mesero solicita cuenta a Caja -> Pasa a 'bill_requested' en tiempo real
+  requestBillForTable: async (tbl) => {
+    const state = get();
+    const tableToUse = tbl || state.tableNumber;
+    if (!tableToUse) return false;
+
+    set((prev) => {
+      const updatedTables = { ...prev.tables };
+      if (updatedTables[tableToUse]) {
+        updatedTables[tableToUse] = {
+          ...updatedTables[tableToUse],
+          status: 'bill_requested',
+          lastUpdated: new Date().toLocaleTimeString(),
+        };
+      }
+      return { tables: updatedTables };
+    });
+
+    if (isSupabaseConfigured()) {
+      await requestBillInSupabase(tableToUse);
+    }
+
+    return true;
+  },
+
+  // Flujo 3: Cajero / Operador completa el pago
+  completePayment: async (paymentMethod, amountPaid, change) => {
     const state = get();
     const activeTable = state.tableNumber;
     if (!activeTable) return;
@@ -347,11 +609,16 @@ export const useCartStore = create<CartState>((set, get) => ({
       timestamp: new Date().toLocaleString(),
     };
 
+    if (isSupabaseConfigured()) {
+      await finalizePaymentInSupabase(activeTable, paymentMethod, amountPaid, change, total);
+    }
+
     set((prev) => {
       const updatedTables = { ...prev.tables };
       updatedTables[activeTable] = {
-        status: 'cleaning', // Cambia a limpieza antes de quedar libre
+        status: 'cleaning',
         cart: {},
+        currentRound: 1,
         lastUpdated: new Date().toLocaleTimeString(),
       };
 
@@ -359,7 +626,7 @@ export const useCartStore = create<CartState>((set, get) => ({
         cart: {},
         tables: updatedTables,
         ordersHistory: [...prev.ordersHistory, newOrder],
-        tableNumber: '', // Deseleccionar la mesa
+        tableNumber: '',
       };
     });
   },
