@@ -1,0 +1,27 @@
+# android/fastlane/Fastfile
+default_platform(:android)
+
+platform :android do
+  desc "Runs all the tests"
+  lane :test do
+    gradle(task: "test")
+  end
+
+  desc "Submit a new Beta Build to Google Play Internal Track"
+  lane :beta do
+    gradle(
+      task: "bundle",
+      build_type: "Release"
+    )
+    # upload_to_play_store(track: 'internal')
+  end
+
+  desc "Deploy a new version to Google Play Store"
+  lane :deploy do
+    gradle(
+      task: "bundle",
+      build_type: "Release"
+    )
+    # upload_to_play_store(track: 'production')
+  end
+end

@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Database, X, Check, Globe, KeyRound } from 'lucide-react-native';
-import { SUPABASE_CONFIG, isSupabaseConfigured } from '../config/supabaseConfig';
+import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 import { useCartStore } from '../store/useCartStore';
 
 interface Props {

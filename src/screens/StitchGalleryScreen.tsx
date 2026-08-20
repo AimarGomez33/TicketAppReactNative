@@ -5,15 +5,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { OrderingScreen } from './OrderingScreen';
 import { PaymentScreen } from './PaymentScreen';
 import { TablesScreen } from './TablesScreen';
+import { KitchenScreen } from './KitchenScreen';
 import { useCartStore } from '../store/useCartStore';
-import { Table, UtensilsCrossed, CreditCard, Sparkles, Radio } from 'lucide-react-native';
+import { Table, UtensilsCrossed, CreditCard, Sparkles, Radio, ChefHat } from 'lucide-react-native';
 import { CustomAlertModal } from '../components/CustomAlertModal';
 
-type ScreenId = 'tables' | 'ordering' | 'payment';
+type ScreenId = 'tables' | 'ordering' | 'kitchen' | 'payment';
 
 const labels: Record<ScreenId, string> = {
   tables: 'Mesas',
   ordering: 'Menú',
+  kitchen: 'Cocina',
   payment: 'Cobro',
 };
 
@@ -70,6 +72,7 @@ export function StitchGalleryScreen() {
       <View style={styles.contentContainer}>
         {selectedScreen === 'tables' && <TablesScreen />}
         {selectedScreen === 'ordering' && <OrderingScreen />}
+        {selectedScreen === 'kitchen' && <KitchenScreen />}
         {selectedScreen === 'payment' && <PaymentScreen />}
       </View>
 
@@ -81,7 +84,7 @@ export function StitchGalleryScreen() {
         {(Object.keys(labels) as ScreenId[]).map(id => {
           const isSelected = id === selectedScreen;
           const color = isSelected ? '#b3006c' : '#8e6e79';
-          const size = isSelected ? 20 : 19;
+          const size = isSelected ? 19 : 18;
 
           const renderIcon = () => {
             switch (id) {
@@ -89,6 +92,8 @@ export function StitchGalleryScreen() {
                 return <Table size={size} color={color} strokeWidth={isSelected ? 2.4 : 1.8} />;
               case 'ordering':
                 return <UtensilsCrossed size={size} color={color} strokeWidth={isSelected ? 2.4 : 1.8} />;
+              case 'kitchen':
+                return <ChefHat size={size} color={color} strokeWidth={isSelected ? 2.4 : 1.8} />;
               case 'payment':
                 return <CreditCard size={size} color={color} strokeWidth={isSelected ? 2.4 : 1.8} />;
             }

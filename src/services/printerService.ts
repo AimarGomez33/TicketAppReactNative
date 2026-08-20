@@ -25,6 +25,7 @@ const ESC_POS = {
 export interface PrintOptions {
   showPrices?: boolean;
   isKitchenComanda?: boolean;
+  station?: 'mexican' | 'american_tacos' | 'all';
   currentRound?: number;
   paymentMethod?: 'cash' | 'card' | 'transfer';
   amountPaid?: number;
@@ -40,6 +41,16 @@ export const generateEscPosBuffer = (
   const showPrices = options?.showPrices ?? true;
   const isKitchen = options?.isKitchenComanda ?? (!showPrices);
   const currentRound = options?.currentRound || 1;
+  const station = options?.station || 'all';
+
+  // Filtrar ítems por estación si se especifica comanda de cocina
+  let targetItems = items;
+  if (isKitchen && station !== 'all') {
+    targetItems = items.filter(it => {
+      const itemStation = it.product.kitchenStation || 'mexican';
+      return itemStation === station;
+    });
+  }
 
   const bytes: number[] = [];
   const addBytes = (arr: number[]) => bytes.push(...arr);
@@ -58,51 +69,49 @@ export const generateEscPosBuffer = (
   addBytes(ESC_POS.TXT_BOLD_OFF);
 
   if (isKitchen) {
+    const stationLabel =
+      station === 'mexican'
+        ? 'COCINA 1: MEXICANA / ANTOJITOS'
+        : station === 'american_tacos'
+        ? 'COCINA 2: TACOS Y AMERICANA'
+        : 'COMANDA GENERAL';
+
     addBytes(ESC_POS.TXT_BOLD_ON);
     addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
-    addText(`*** COMANDA COCINA - MESA ${tableNumber || 'S/N'} ***\n`);
+    addText(`*** ${stationLabel} ***\n`);
+    addText(`MESA: ${tableNumber ? tableNumber.toUpperCase() : 'S/N'}\n`);
     addBytes(ESC_POS.TXT_NORMAL);
     addBytes(ESC_POS.TXT_BOLD_OFF);
     addText(`Ronda Actual: #${currentRound} | Hora: ${new Date().toLocaleTimeString()}\n`);
     addText('================================\n');
 
     // Separar platillos nuevos (pending o de la ronda actual) vs anteriores (ya enviados)
-    const newItems = items.filter(it => it.status === 'pending' || (it.round && it.round === currentRound));
-    const previousItems = items.filter(it => it.status === 'sent_to_kitchen' && it.round && it.round < currentRound);
+    const newItems = targetItems.filter(it => it.status === 'pending' || (it.round && it.round === currentRound));
+    const previousItems = targetItems.filter(it => it.status === 'sent_to_kitchen' && it.round && it.round < currentRound);
 
     addBytes(ESC_POS.ALIGN_LEFT);
 
     // Sección 1: Nuevos Platillos a Preparar
     addBytes(ESC_POS.TXT_BOLD_ON);
-    addText(`[!] NUEVOS A PREPARAR (Ronda ${currentRound}):\n`);
+    addText(`[!] A PREPARAR (Ronda ${currentRound}):\n`);
     addBytes(ESC_POS.TXT_BOLD_OFF);
     addText('--------------------------------\n');
 
-    if (newItems.length === 0) {
-      // Si todos estaban marcados, imprimir todos
-      items.forEach(({ product, quantity, notes }) => {
-        addBytes(ESC_POS.TXT_BOLD_ON);
-        addText(` > ${quantity}x ${product.name}\n`);
-        addBytes(ESC_POS.TXT_BOLD_OFF);
-        if (notes && notes.trim().length > 0) {
-          addText(`    * NOTA: ${notes.trim()}\n`);
-        }
-        addText('\n');
-      });
-    } else {
-      newItems.forEach(({ product, quantity, notes }) => {
-        addBytes(ESC_POS.TXT_BOLD_ON);
-        addText(` > ${quantity}x ${product.name}\n`);
-        addBytes(ESC_POS.TXT_BOLD_OFF);
-        if (notes && notes.trim().length > 0) {
-          addText(`    * NOTA: ${notes.trim()}\n`);
-        }
-        addText('\n');
-      });
-    }
+    const itemsToPrint = newItems.length > 0 ? newItems : targetItems;
+    itemsToPrint.forEach(({ product, quantity, notes }) => {
+      addBytes(ESC_POS.TXT_BOLD_ON);
+      addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
+      addText(` > ${quantity}x ${product.name}\n`);
+      addBytes(ESC_POS.TXT_NORMAL);
+      addBytes(ESC_POS.TXT_BOLD_OFF);
+      if (notes && notes.trim().length > 0) {
+        addText(`    * NOTA: ${notes.trim()}\n`);
+      }
+      addText('\n');
+    });
 
     // Sección 2: Platillos Anteriores ya enviados (Contexto para cocina)
-    if (previousItems.length > 0) {
+    if (previousItems.length > 0 && newItems.length > 0) {
       addText('\n');
       addBytes(ESC_POS.TXT_BOLD_ON);
       addText('[v] YA ENVIADOS ANTERIORMENTE:\n');
@@ -118,11 +127,11 @@ export const generateEscPosBuffer = (
 
     addBytes(ESC_POS.ALIGN_CENTER);
     addText('\n================================\n');
-    const totalQty = items.reduce((sum, it) => sum + it.quantity, 0);
+    const totalQty = targetItems.reduce((sum, it) => sum + it.quantity, 0);
     addBytes(ESC_POS.TXT_BOLD_ON);
-    addText(`Total Acumulado Mesa: ${totalQty} articulos\n`);
+    addText(`Total en esta comanda: ${totalQty} articulos\n`);
     addBytes(ESC_POS.TXT_BOLD_OFF);
-    addText('¡Comanda enviada a cocina!\n\n\n');
+    addText('¡Comanda lista para preparar!\n\n\n');
 
   } else {
     // Ticket de Cobro / Cliente
@@ -178,12 +187,16 @@ export const printTicketTCP = (
   items: CartItem[],
   total: number,
   options?: PrintOptions,
+  customHost?: string,
+  customPort?: number,
 ): Promise<boolean> => {
   return new Promise((resolve, reject) => {
     const payload = generateEscPosBuffer(tableNumber, items, total, options);
+    const host = customHost || PRINTER_CONFIG.host;
+    const port = customPort || PRINTER_CONFIG.port;
 
     const client = TcpSocket.createConnection(
-      { host: PRINTER_CONFIG.host, port: PRINTER_CONFIG.port },
+      { host, port },
       () => {
         client.write(Buffer.from(payload));
         client.destroy();
@@ -195,7 +208,7 @@ export const printTicketTCP = (
 
     client.on('timeout', () => {
       client.destroy();
-      reject(new Error('Timeout: Impresora 192.168.100.200 no responde'));
+      reject(new Error(`Timeout: Impresora ${host}:${port} no responde`));
     });
 
     client.on('error', error => {

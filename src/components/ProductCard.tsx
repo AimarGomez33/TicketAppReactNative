@@ -13,7 +13,7 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
   const [modalVisible, setModalVisible] = useState(false);
   
   const addItem = useCartStore(state => state.addItem);
-  const addQuantity = useCartStore(state => state.addQuantity);
+  //const addQuantity = useCartStore(state => state.addQuantity);
   const setQuantity = useCartStore(state => state.setQuantity);
   const removeItem = useCartStore(state => state.removeItem);
   const cartItem = useCartStore(state => state.cart[product.id]);
@@ -21,7 +21,7 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
   const quantity = cartItem ? cartItem.quantity : 0;
   const notes = cartItem?.notes;
 
-  const isChalupa = product.id === 'ant-chalupa' || product.id === 'gen-chalupa';
+  //const isChalupa = product.id === 'ant-chalupa' || product.id === 'gen-chalupa';
 
   const handleModalConfirm = (newQty: number, newNotes: string) => {
     setQuantity(product, newQty, newNotes);

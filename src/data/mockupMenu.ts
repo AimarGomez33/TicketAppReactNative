@@ -4,141 +4,142 @@ import { Product } from '../store/useCartStore';
 export interface Category {
   id: string;
   name: string;
+  station: 'mexican' | 'american_tacos' | 'all';
 }
 
 export const CATEGORIES_DETAILED: Category[] = [
-  { id: 'top', name: '★ Populares' },
-  { id: 'antojitos', name: 'Antojitos' },
-  { id: 'quesadillas', name: 'Quesadillas' },
-  { id: 'tostadas', name: 'Tostadas' },
-  { id: 'pambazos', name: 'Pambazos' },
-  { id: 'especiales', name: 'Guajolotas y Guajoloyet' },
-  { id: 'pozole', name: 'Pozole' },
-  { id: 'tacos', name: 'Tacos' },
-  { id: 'hamburguesas', name: 'Hamburguesas' },
-  { id: 'alitas_papas', name: 'Alitas y Papas' },
-  { id: 'bebidas', name: 'Bebidas' },
-  { id: 'extras', name: 'Extras' },
+  { id: 'top', name: '★ Populares', station: 'all' },
+  { id: 'antojitos', name: 'Antojitos', station: 'mexican' },
+  { id: 'quesadillas', name: 'Quesadillas', station: 'mexican' },
+  { id: 'tostadas', name: 'Tostadas', station: 'mexican' },
+  { id: 'pambazos', name: 'Pambazos', station: 'mexican' },
+  { id: 'guajolotas', name: 'Guajolotas y Volcanes', station: 'mexican' },
+  { id: 'pozole', name: 'Pozole', station: 'mexican' },
+  { id: 'hamburguesas', name: 'Hamburguesas', station: 'american_tacos' },
+  { id: 'alitas', name: 'Alitas', station: 'american_tacos' },
+  { id: 'tacos', name: 'Tacos', station: 'american_tacos' },
+  { id: 'papas', name: 'Papas & Boneless', station: 'american_tacos' },
+  { id: 'bebidas', name: 'Bebidas', station: 'mexican' },
+  { id: 'extras', name: 'Extras', station: 'all' },
 ];
 
 export const CATEGORIES_GENERAL: Category[] = [
-  { id: 'top', name: '★ Principales' },
-  { id: 'antojitos', name: 'Antojitos' },
-  { id: 'quesadillas', name: 'Quesadillas' },
-  { id: 'tostadas', name: 'Tostadas' },
-  { id: 'pambazos', name: 'Pambazos' },
-  { id: 'especiales', name: 'Especiales' },
-  { id: 'pozole', name: 'Pozole' },
-  { id: 'tacos', name: 'Tacos' },
-  { id: 'hamburguesas', name: 'Hamburguesas' },
-  { id: 'alitas_papas', name: 'Alitas y Papas' },
-  { id: 'bebidas', name: 'Bebidas' },
-  { id: 'extras', name: 'Extras' },
+  { id: 'top', name: '★ Principales', station: 'all' },
+  { id: 'antojitos', name: 'Antojitos', station: 'mexican' },
+  { id: 'quesadillas', name: 'Quesadillas', station: 'mexican' },
+  { id: 'tostadas', name: 'Tostadas', station: 'mexican' },
+  { id: 'pambazos', name: 'Pambazos', station: 'mexican' },
+  { id: 'guajolotas', name: 'Guajolotas', station: 'mexican' },
+  { id: 'pozole', name: 'Pozole', station: 'mexican' },
+  { id: 'hamburguesas', name: 'Hamburguesas', station: 'american_tacos' },
+  { id: 'alitas', name: 'Alitas', station: 'american_tacos' },
+  { id: 'tacos', name: 'Tacos', station: 'american_tacos' },
+  { id: 'papas', name: 'Papas', station: 'american_tacos' },
+  { id: 'bebidas', name: 'Bebidas', station: 'mexican' },
+  { id: 'extras', name: 'Extras', station: 'all' },
 ];
 
 export const CATEGORIES: Category[] = CATEGORIES_GENERAL;
 
+// ==========================================
+// MENÚ GENERAL (Para captura rápida en punto de venta)
+// ==========================================
 export const MOCK_PRODUCTS_GENERAL: Product[] = [
-  // --- ANTOJITOS ---
+  // --- 🇲🇽 COCINA 1: ANTOJITOS ---
   {
     id: 'gen-chalupa',
     name: 'Chalupa (Pieza)',
     price: 6.0,
     category: 'antojitos',
-    description: 'Tortillita de maíz, papa, salsa, lechuga, queso y pollo',
+    kitchenStation: 'mexican',
+    description: 'Tortillita de maíz, papa, salsa, lechuga, queso rallado y pollo',
   },
   {
-    id: 'gen-menudencias',
-    name: 'Orden de Menudencias',
+    id: 'gen-mollejas',
+    name: 'Orden de Mollejas',
     price: 25.0,
     category: 'antojitos',
-    description: '2 tortillas maíz, mollejas / patitas / hígados, salsa, lechuga y queso',
+    kitchenStation: 'mexican',
+    description: '2 tortillas maíz, 3 mollejas de pollo, salsa, lechuga, queso rallado',
+  },
+  {
+    id: 'gen-patitas',
+    name: 'Orden de Patitas',
+    price: 25.0,
+    category: 'antojitos',
+    kitchenStation: 'mexican',
+    description: '2 tortillas maíz, 3 patitas de pollo, salsa, lechuga, queso rallado',
+  },
+  {
+    id: 'gen-higados',
+    name: 'Orden de Hígados',
+    price: 25.0,
+    category: 'antojitos',
+    kitchenStation: 'mexican',
+    description: '2 tortillas maíz, 3 hígados de pollo, salsa, lechuga, queso rallado',
   },
   {
     id: 'gen-huevo',
     name: 'Huevo Preparado',
     price: 22.0,
     category: 'antojitos',
-    description: '2 tortillas maíz, huevo, salsa, lechuga y queso rallado',
+    kitchenStation: 'mexican',
+    description: '2 tortillas maíz, 1 huevo, salsa, lechuga, queso rallado',
   },
   {
     id: 'gen-alon',
     name: 'Alón Preparado',
     price: 25.0,
     category: 'antojitos',
-    description: '2 tortillas maíz, alita de pollo, salsa, lechuga y queso',
+    kitchenStation: 'mexican',
+    description: '2 tortillas maíz, 1 alita de pollo, salsa, lechuga, queso rallado',
   },
 
-  // --- QUESADILLAS (General) ---
+  // --- 🇲🇽 COCINA 1: QUESADILLAS ($33 c/u) ---
   {
     id: 'gen-quesadilla',
-    name: 'Quesadilla',
+    name: 'Quesadilla (25 cm)',
     price: 33.0,
     category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso. Guisado a elegir (tinga, bistec, huitlacoche, etc.)',
+    kitchenStation: 'mexican',
+    description: 'Con o sin queso. Especificar guisado en notas',
   },
 
-  // --- TOSTADAS (General) ---
+  // --- 🇲🇽 COCINA 1: TOSTADAS ($37 c/u) ---
   {
     id: 'gen-tostada',
-    name: 'Tostada',
+    name: 'Tostada Preparada',
     price: 37.0,
     category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado a elegir, lechuga y queso rallado',
+    kitchenStation: 'mexican',
+    description: 'Tostada de maíz, crema, guisado a elegir, lechuga, queso rallado',
   },
 
-  // --- PAMBAZOS (General) ---
+  // --- 🇲🇽 COCINA 1: GUAJOLOYET ---
   {
-    id: 'gen-pambazo-natural',
-    name: 'Pambazo Natural',
-    price: 38.0,
-    category: 'pambazos',
-    description: '1 guisado a elegir, papa, salsa, lechuga y queso rallado',
-  },
-  {
-    id: 'gen-pambazo-adobado',
-    name: 'Pambazo Adobado',
-    price: 43.0,
-    category: 'pambazos',
-    description: '1 guisado a elegir, adobado, papa, salsa, lechuga y queso',
-  },
-  {
-    id: 'gen-pambazo-comb',
-    name: 'Pambazo Combinado (2 Guisados)',
-    price: 48.0,
-    category: 'pambazos',
-    description: '2 guisados a elegir, natural o adobado, papa, salsa, lechuga y queso',
-  },
-
-  // --- ESPECIALES ---
-  {
-    id: 'gen-guajolota',
-    name: 'Guajolota / Volcán',
-    price: 60.0,
-    category: 'especiales',
-    description: 'Huarache ~25cm con guisado a elegir, salsa, lechuga, queso rallado y Oaxaca',
-  },
-  {
-    id: 'gen-guajoloyet-natural',
+    id: 'gen-guajoloyet-nat',
     name: 'Guajoloyet Natural',
     price: 65.0,
-    category: 'especiales',
-    description: 'Pambazo natural con 2 chalupas, pollo, huevo, chorizo, salsa, lechuga y queso',
+    category: 'pambazos',
+    kitchenStation: 'mexican',
+    description: 'Pambazo con 2 chalupas, pollo, huevo, chorizo, salsa, lechuga y queso',
   },
   {
-    id: 'gen-guajoloyet-adobado',
+    id: 'gen-guajoloyet-adob',
     name: 'Guajoloyet Adobado',
     price: 70.0,
-    category: 'especiales',
+    category: 'pambazos',
+    kitchenStation: 'mexican',
     description: 'Pambazo adobado con 2 chalupas, pollo, huevo, chorizo, salsa, lechuga y queso',
   },
 
-  // --- POZOLE ---
+  // --- 🇲🇽 COCINA 1: POZOLE ---
   {
     id: 'gen-pozole-chico',
     name: 'Pozole Chico',
     price: 100.0,
     category: 'pozole',
+    kitchenStation: 'mexican',
     description: 'Pollo, puerco o combinado. Incluye tostadas y guarnición',
   },
   {
@@ -146,632 +147,302 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     name: 'Pozole Grande',
     price: 120.0,
     category: 'pozole',
+    kitchenStation: 'mexican',
     description: 'Pollo, puerco o combinado. Incluye tostadas y guarnición',
   },
 
-  // --- TACOS (General) ---
+  // --- 🇲🇽 COCINA 1: PAMBAZOS ---
   {
-    id: 'gen-taco',
-    name: 'Taco (Harina o Maíz)',
-    price: 35.0,
-    category: 'tacos',
-    description: 'Arrachera, costilla, carne enchilada, bistec, chorizo o campechano. Con nopales y perejil',
+    id: 'gen-pambazo-nat',
+    name: 'Pambazo Natural (1 Guisado)',
+    price: 38.0,
+    category: 'pambazos',
+    kitchenStation: 'mexican',
+    description: 'Papa, salsa, lechuga, queso rallado y 1 guisado',
+  },
+  {
+    id: 'gen-pambazo-adob',
+    name: 'Pambazo Adobado (1 Guisado)',
+    price: 43.0,
+    category: 'pambazos',
+    kitchenStation: 'mexican',
+    description: 'Papa, salsa, lechuga, queso rallado y 1 guisado',
+  },
+  {
+    id: 'gen-pambazo-nat-comb',
+    name: 'Pambazo Natural Combinado (2 Guisados)',
+    price: 45.0,
+    category: 'pambazos',
+    kitchenStation: 'mexican',
+    description: 'Papa, salsa, lechuga, queso rallado y 2 guisados',
+  },
+  {
+    id: 'gen-pambazo-adob-comb',
+    name: 'Pambazo Adobado Combinado (2 Guisados)',
+    price: 50.0,
+    category: 'pambazos',
+    kitchenStation: 'mexican',
+    description: 'Papa, salsa, lechuga, queso rallado y 2 guisados',
   },
 
-  // --- HAMBURGUESAS ---
+  // --- 🇲🇽 COCINA 1: GUAJOLOTA / VOLCÁN ---
   {
-    id: 'gen-hamburguesa-sencilla',
+    id: 'gen-guajolota',
+    name: 'Guajolota / Volcán (25 cm)',
+    price: 60.0,
+    category: 'guajolotas',
+    kitchenStation: 'mexican',
+    description: 'Huarache de maíz 25 cm, guisado, salsa, lechuga, queso rallado y Oaxaca',
+  },
+
+  // --- 🇺🇸 🌮 COCINA 2: HAMBURGUESAS ---
+  {
+    id: 'gen-burg-americana',
     name: 'Hamburguesa Americana',
     price: 60.0,
     category: 'hamburguesas',
+    kitchenStation: 'american_tacos',
     description: 'Carne, queso americano, aderezo de la casa, cebolla, pepinillos',
   },
   {
-    id: 'gen-hamburguesa-especial',
-    name: 'Hamburguesa Especial / Suiza',
+    id: 'gen-burg-especial',
+    name: 'Hamburguesa Especial',
     price: 90.0,
     category: 'hamburguesas',
-    description: 'Carne, tocino, queso Oaxaca, americano/manchego, aderezo, lechuga, cebolla',
+    kitchenStation: 'american_tacos',
+    description: 'Carne, tocino, queso Oaxaca, queso americano, aderezo, lechuga, cebolla, pepinillos',
   },
   {
-    id: 'gen-hamburguesa-texana',
-    name: 'Hamburguesa Texana / Pollo BBQ',
+    id: 'gen-burg-suiza',
+    name: 'Hamburguesa Suiza',
+    price: 90.0,
+    category: 'hamburguesas',
+    kitchenStation: 'american_tacos',
+    description: 'Carne, queso Oaxaca, americano, manchego, aderezo, lechuga, cebolla, pepinillos',
+  },
+  {
+    id: 'gen-burg-texana',
+    name: 'Hamburguesa Texana',
     price: 110.0,
     category: 'hamburguesas',
-    description: 'Carne o pollo crují, manchego, tocino, aros de cebolla, salsa BBQ, aderezo',
+    kitchenStation: 'american_tacos',
+    description: 'Carne, queso manchego, tocino, aros de cebolla, salsa BBQ, aderezo, lechuga',
+  },
+  {
+    id: 'gen-burg-pollo-bbq',
+    name: 'Hamburguesa Pollo BBQ',
+    price: 105.0,
+    category: 'hamburguesas',
+    kitchenStation: 'american_tacos',
+    description: 'Pollo crují, queso manchego, tocino, salsa BBQ, aderezo, lechuga, cebolla, pepinillos',
   },
 
-  // --- ALITAS Y PAPAS ---
+  // --- 🇺🇸 🌮 COCINA 2: ALITAS ---
   {
     id: 'gen-alitas-6',
     name: 'Alitas (Orden de 6)',
     price: 80.0,
-    category: 'alitas_papas',
-    description: 'BBQ, BBQ Picante, Búfalo, Mango-Hab., Lemon Pepper o Ajo Parm.',
+    category: 'alitas',
+    kitchenStation: 'american_tacos',
+    description: 'Salsas: BBQ, BBQ Picante, Búfalo, Mango-Habanero, Lemon Pepper, Ajo Parmesano',
   },
   {
     id: 'gen-alitas-12',
     name: 'Alitas (Orden de 12)',
     price: 140.0,
-    category: 'alitas_papas',
-    description: 'BBQ, BBQ Picante, Búfalo, Mango-Hab., Lemon Pepper o Ajo Parm.',
+    category: 'alitas',
+    kitchenStation: 'american_tacos',
+    description: 'Salsas: BBQ, BBQ Picante, Búfalo, Mango-Habanero, Lemon Pepper, Ajo Parmesano',
   },
+
+  // --- 🇺🇸 🌮 COCINA 2: TACOS ($35 c/u) ---
+  {
+    id: 'gen-taco',
+    name: 'Taco (Pieza)',
+    price: 35.0,
+    category: 'tacos',
+    kitchenStation: 'american_tacos',
+    description: 'Harina o maíz, nopales y perejil frito. Especificar carne en notas',
+  },
+
+  // --- 🇺🇸 🌮 COCINA 2: PAPAS ---
   {
     id: 'gen-papas-sencillas',
-    name: 'Papas a la Francesa',
+    name: 'Papas Sencillas',
     price: 60.0,
-    category: 'alitas_papas',
-    description: 'Porción de papas a la francesa clásicas',
+    category: 'papas',
+    kitchenStation: 'american_tacos',
+    description: 'Papas a la francesa sazonadas',
   },
   {
     id: 'gen-papas-boneless',
     name: 'Papas con Boneless',
     price: 130.0,
-    category: 'alitas_papas',
-    description: 'Papas francesas con boneless y 1 salsa a elegir',
+    category: 'papas',
+    kitchenStation: 'american_tacos',
+    description: 'Papas con trozos de boneless (1 salsa a elegir)',
   },
   {
-    id: 'gen-papas-aros',
-    name: 'Papas c/ Aros de Cebolla y BBQ',
+    id: 'gen-papas-aros-bbq',
+    name: 'Papas con Aros de Cebolla y BBQ',
     price: 110.0,
-    category: 'alitas_papas',
-    description: 'Papas francesas, aros de cebolla y salsa BBQ',
+    category: 'papas',
+    kitchenStation: 'american_tacos',
+    description: 'Papas a la francesa con aros de cebolla y salsa BBQ',
   },
 
-  // --- BEBIDAS ---
+  // --- 🇲🇽 BEBIDAS ---
   {
     id: 'gen-refresco',
-    name: 'Refresco',
+    name: 'Refresco (Lata / Botella)',
     price: 28.0,
     category: 'bebidas',
-    description: 'Coca-Cola, Sangría, Manzanita, Squirt, 7up, Mirinda, Sprite, Boing...',
+    kitchenStation: 'mexican',
+    description: 'Coca-Cola, Sangría, Manzanita, Squirt, 7up, Mirinda, Sprite, Boing, etc.',
   },
   {
     id: 'gen-agua-500',
-    name: 'Agua de Sabor (1/2 Litro)',
+    name: 'Agua de Sabor (Medio Litro)',
     price: 26.0,
     category: 'bebidas',
-    description: 'Horchata, Nuez, Jamaica, Limón c/ chía, Mojito...',
+    kitchenStation: 'mexican',
+    description: 'Horchata, Nuez, Jamaica, Limón con chía, Mojito, Jamaica sin azúcar',
   },
   {
     id: 'gen-agua-1000',
     name: 'Agua Natural (1 Litro)',
     price: 24.0,
     category: 'bebidas',
-    description: 'Agua purificada natural 1L',
+    kitchenStation: 'mexican',
+    description: 'Agua natural embotellada 1L',
   },
   {
     id: 'gen-cafe',
     name: 'Café Americano',
     price: 24.0,
     category: 'bebidas',
-    description: 'Café americano caliente',
+    kitchenStation: 'mexican',
+    description: 'Café americano recién hecho',
   },
 
   // --- EXTRAS ---
   {
-    id: 'gen-ext-papas',
-    name: 'Complemento Papas (150 gr)',
+    id: 'ext-papas-combo',
+    name: 'Extra: Con Papas (150 gr)',
     price: 30.0,
     category: 'extras',
-    description: 'Para acompañar hamburguesas o alitas (+150 gr)',
+    kitchenStation: 'american_tacos',
+    description: 'Complemento de papas para hamburguesas o alitas',
   },
   {
-    id: 'gen-ext-queso',
-    name: 'Queso Extra',
-    price: 15.0,
-    category: 'extras',
-    description: 'Para Pambazo, Guajolota o Guajoloyet',
-  },
-  {
-    id: 'gen-ext-guisado',
-    name: 'Guisado Extra',
-    price: 15.0,
-    category: 'extras',
-    description: 'Porción de guisado extra',
-  },
-  {
-    id: 'gen-ext-taco-queso',
-    name: 'Con Queso (Extra Taco)',
+    id: 'ext-queso-taco',
+    name: 'Extra: Con Queso (Taco)',
     price: 12.0,
     category: 'extras',
-    description: 'Queso adicional para orden de taco',
+    kitchenStation: 'american_tacos',
+    description: 'Queso fundido extra para tacos',
   },
   {
-    id: 'gen-ext-crema',
-    name: 'Crema Extra (Pozole)',
+    id: 'ext-queso-guajoloyet',
+    name: 'Extra: Queso o Guisado (Guajoloyet / Volcán / Pambazo)',
+    price: 15.0,
+    category: 'extras',
+    kitchenStation: 'mexican',
+    description: 'Porción extra de queso Oaxaca o guisado',
+  },
+  {
+    id: 'ext-crema-pozole',
+    name: 'Extra: Crema (Pozole)',
     price: 10.0,
     category: 'extras',
+    kitchenStation: 'mexican',
     description: 'Porción extra de crema',
   },
 ];
 
+// ==========================================
+// MENÚ DETALLADO (Desglose individual de cada guisado y variedad)
+// ==========================================
 export const MOCK_PRODUCTS_DETAILED: Product[] = [
-  // --- ANTOJITOS (Página 1) ---
-  {
-    id: 'ant-chalupa',
-    name: 'Chalupa (Pieza)',
-    price: 6.0,
-    category: 'antojitos',
-    description: 'Tortillita de maíz, papa, salsa, lechuga, queso y pollo',
-  },
-  {
-    id: 'ant-mollejas',
-    name: 'Orden de Mollejas',
-    price: 25.0,
-    category: 'antojitos',
-    description: '2 tortillas maíz, 3 mollejas pollo, salsa, lechuga, queso',
-  },
-  {
-    id: 'ant-patitas',
-    name: 'Orden de Patitas',
-    price: 25.0,
-    category: 'antojitos',
-    description: '2 tortillas maíz, 3 patitas pollo, salsa, lechuga, queso',
-  },
-  {
-    id: 'ant-higados',
-    name: 'Orden de Hígados',
-    price: 25.0,
-    category: 'antojitos',
-    description: '2 tortillas maíz, 3 hígados pollo, salsa, lechuga, queso',
-  },
-  {
-    id: 'ant-huevo',
-    name: 'Huevo Preparado',
-    price: 22.0,
-    category: 'antojitos',
-    description: '2 tortillas maíz, 1 huevo, salsa, lechuga, queso rallado',
-  },
-  {
-    id: 'ant-alon',
-    name: 'Alón Preparado',
-    price: 25.0,
-    category: 'antojitos',
-    description: '2 tortillas maíz, 1 alita pollo, salsa, lechuga, queso rallado',
-  },
+  // --- ANTOJITOS ---
+  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'antojitos'),
 
-  // --- QUESADILLAS (Aprox. 25 cm - Con o sin queso - $33 c/u) (Página 1) ---
-  {
-    id: 'ques-tinga',
-    name: 'Quesadilla Tinga de Pollo',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-bistec',
-    name: 'Quesadilla Bistec',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-huitlacoche',
-    name: 'Quesadilla Huitlacoche',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-chicharron',
-    name: 'Quesadilla Chicharrón Prensado',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-huevo',
-    name: 'Quesadilla Huevo',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-molleja',
-    name: 'Quesadilla Molleja',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-chorizo',
-    name: 'Quesadilla Chorizo',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-picadillo',
-    name: 'Quesadilla Picadillo',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-mole-verde',
-    name: 'Quesadilla Mole Verde',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-panza',
-    name: 'Quesadilla Panza',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-champinones',
-    name: 'Quesadilla Champiñones',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-pollo',
-    name: 'Quesadilla Pollo',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-bistec-nopales',
-    name: 'Quesadilla Bistec c/ Nopales',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
-  {
-    id: 'ques-papa-chorizo',
-    name: 'Quesadilla Papa c/ Chorizo',
-    price: 33.0,
-    category: 'quesadillas',
-    description: 'Aprox. 25 cm, con o sin queso',
-  },
+  // --- QUESADILLAS ($33 c/u) ---
+  { id: 'q-tinga', name: 'Quesadilla Tinga de Pollo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-bistec', name: 'Quesadilla Bistec', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-huitla', name: 'Quesadilla Huitlacoche', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-chich', name: 'Quesadilla Chicharrón Prensado', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-huevo', name: 'Quesadilla Huevo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-molleja', name: 'Quesadilla Molleja', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-chorizo', name: 'Quesadilla Chorizo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-picadillo', name: 'Quesadilla Picadillo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-mole-verde', name: 'Quesadilla Mole Verde', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-panza', name: 'Quesadilla Panza', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-champ', name: 'Quesadilla Champiñones', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-pollo', name: 'Quesadilla Pollo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-bistec-nopales', name: 'Quesadilla Bistec con Nopales', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
+  { id: 'q-papa-chorizo', name: 'Quesadilla Papa con Chorizo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
 
-  // --- TOSTADAS ($37 c/u) (Página 1) ---
-  {
-    id: 'tost-pata',
-    name: 'Tostada Pata de Res',
-    price: 37.0,
-    category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado, lechuga y queso rallado',
-  },
-  {
-    id: 'tost-tinga',
-    name: 'Tostada Tinga de Pollo',
-    price: 37.0,
-    category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado, lechuga y queso rallado',
-  },
-  {
-    id: 'tost-picadillo',
-    name: 'Tostada Picadillo',
-    price: 37.0,
-    category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado, lechuga y queso rallado',
-  },
-  {
-    id: 'tost-mole-verde',
-    name: 'Tostada Mole Verde',
-    price: 37.0,
-    category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado, lechuga y queso rallado',
-  },
-  {
-    id: 'tost-panza',
-    name: 'Tostada Panza',
-    price: 37.0,
-    category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado, lechuga y queso rallado',
-  },
-  {
-    id: 'tost-champinones',
-    name: 'Tostada Champiñones',
-    price: 37.0,
-    category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado, lechuga y queso rallado',
-  },
-  {
-    id: 'tost-pollo',
-    name: 'Tostada Pollo',
-    price: 37.0,
-    category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado, lechuga y queso rallado',
-  },
-  {
-    id: 'tost-bistec-nopales',
-    name: 'Tostada Bistec c/ Nopales',
-    price: 37.0,
-    category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado, lechuga y queso rallado',
-  },
-  {
-    id: 'tost-papa-chorizo',
-    name: 'Tostada Papa c/ Chorizo',
-    price: 37.0,
-    category: 'tostadas',
-    description: 'Tostada maíz, crema, guisado, lechuga y queso rallado',
-  },
+  // --- TOSTADAS ($37 c/u) ---
+  { id: 'tost-pata', name: 'Tostada Pata de Res', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
+  { id: 'tost-tinga', name: 'Tostada Tinga de Pollo', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
+  { id: 'tost-picadillo', name: 'Tostada Picadillo', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
+  { id: 'tost-mole-verde', name: 'Tostada Mole Verde', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
+  { id: 'tost-panza', name: 'Tostada Panza', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
+  { id: 'tost-champ', name: 'Tostada Champiñones', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
+  { id: 'tost-pollo', name: 'Tostada Pollo', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
+  { id: 'tost-bistec-nopales', name: 'Tostada Bistec con Nopales', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
+  { id: 'tost-papa-chorizo', name: 'Tostada Papa con Chorizo', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
 
-  // --- GUAJOLOYET Y GUAJOLOTAS (Página 1 y 2) ---
-  {
-    id: 'esp-guajoloyet-adobado',
-    name: 'Guajoloyet Adobado',
-    price: 70.0,
-    category: 'especiales',
-    description: 'Pambazo adobado con 2 chalupas, pollo, huevo, chorizo, salsa, lechuga y queso',
-  },
-  {
-    id: 'esp-guajoloyet-natural',
-    name: 'Guajoloyet Natural',
-    price: 65.0,
-    category: 'especiales',
-    description: 'Pambazo natural con 2 chalupas, pollo, huevo, chorizo, salsa, lechuga y queso',
-  },
-  {
-    id: 'esp-guajolota',
-    name: 'Guajolota / Volcán (1 Guisado)',
-    price: 60.0,
-    category: 'especiales',
-    description: 'Huarache ~25cm con guisado, salsa, lechuga, queso rallado y Oaxaca',
-  },
+  // --- GUAJOLOYET & POZOLE ---
+  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'pambazos' || p.category === 'pozole'),
 
-  // --- POZOLE (Página 1) ---
-  {
-    id: 'poz-chico',
-    name: 'Pozole Chico',
-    price: 100.0,
-    category: 'pozole',
-    description: 'Pollo, puerco o combinado. Incluye tostadas y guarnición',
-  },
-  {
-    id: 'poz-grande',
-    name: 'Pozole Grande',
-    price: 120.0,
-    category: 'pozole',
-    description: 'Pollo, puerco o combinado. Incluye tostadas y guarnición',
-  },
+  // --- GUAJOLOTAS / VOLCANES ($60 c/u) ---
+  { id: 'gj-pollo', name: 'Guajolota Pollo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-papa-chorizo', name: 'Guajolota Papa con Chorizo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-tinga', name: 'Guajolota Tinga de Pollo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-bistec', name: 'Guajolota Bistec', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-huitla', name: 'Guajolota Huitlacoche', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-chich', name: 'Guajolota Chicharrón', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-huevo', name: 'Guajolota Huevo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-molleja', name: 'Guajolota Molleja', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-picadillo', name: 'Guajolota Picadillo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-mole-verde', name: 'Guajolota Mole Verde', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-panza', name: 'Guajolota Panza', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-champ', name: 'Guajolota Champiñones', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-bistec-nopales', name: 'Guajolota Bistec con Nopales', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
+  { id: 'gj-chorizo', name: 'Guajolota Chorizo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
 
-  // --- PAMBAZOS (Página 2) ---
-  {
-    id: 'pam-natural-1',
-    name: 'Pambazo Natural (1 Guisado)',
-    price: 38.0,
-    category: 'pambazos',
-    description: '1 guisado a elegir, papa, salsa, lechuga y queso rallado',
-  },
-  {
-    id: 'pam-adobado-1',
-    name: 'Pambazo Adobado (1 Guisado)',
-    price: 43.0,
-    category: 'pambazos',
-    description: '1 guisado a elegir, adobado, papa, salsa, lechuga y queso',
-  },
-  {
-    id: 'pam-natural-2',
-    name: 'Pambazo Natural Comb. (2 Guisados)',
-    price: 45.0,
-    category: 'pambazos',
-    description: '2 guisados a elegir, papa, salsa, lechuga y queso rallado',
-  },
-  {
-    id: 'pam-adobado-2',
-    name: 'Pambazo Adobado Comb. (2 Guisados)',
-    price: 50.0,
-    category: 'pambazos',
-    description: '2 guisados a elegir, adobado, papa, salsa, lechuga y queso',
-  },
+  // --- HAMBURGUESAS ---
+  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'hamburguesas'),
 
-  // --- HAMBURGUESAS (Página 3) ---
-  {
-    id: 'hamb-americana',
-    name: 'Hamburguesa Americana',
-    price: 60.0,
-    category: 'hamburguesas',
-    description: 'Carne, queso americano, aderezo de la casa, cebolla, pepinillos',
-  },
-  {
-    id: 'hamb-especial',
-    name: 'Hamburguesa Especial',
-    price: 90.0,
-    category: 'hamburguesas',
-    description: 'Carne, tocino, queso Oaxaca, americano, aderezo, lechuga, cebolla, pepinillos',
-  },
-  {
-    id: 'hamb-suiza',
-    name: 'Hamburguesa Suiza',
-    price: 90.0,
-    category: 'hamburguesas',
-    description: 'Carne, queso Oaxaca, americano, manchego, aderezo, lechuga, cebolla, pepinillos',
-  },
-  {
-    id: 'hamb-texana',
-    name: 'Hamburguesa Texana',
-    price: 110.0,
-    category: 'hamburguesas',
-    description: 'Carne, manchego, tocino, aros de cebolla, salsa BBQ, aderezo, lechuga, pepinillos',
-  },
-  {
-    id: 'hamb-pollo-bbq',
-    name: 'Hamburguesa Pollo BBQ',
-    price: 105.0,
-    category: 'hamburguesas',
-    description: 'Pollo crují, manchego, tocino, salsa BBQ, aderezo, lechuga, cebolla, pepinillos',
-  },
+  // --- ALITAS ---
+  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'alitas'),
 
-  // --- TACOS ($35 c/u - Harina o Maíz) (Página 3) ---
-  {
-    id: 'tac-arrachera',
-    name: 'Taco de Arrachera',
-    price: 35.0,
-    category: 'tacos',
-    description: 'Tortilla harina o maíz, nopales y perejil frito',
-  },
-  {
-    id: 'tac-costilla',
-    name: 'Taco de Costilla',
-    price: 35.0,
-    category: 'tacos',
-    description: 'Tortilla harina o maíz, nopales y perejil frito',
-  },
-  {
-    id: 'tac-carne-enchilada',
-    name: 'Taco Carne Enchilada',
-    price: 35.0,
-    category: 'tacos',
-    description: 'Tortilla harina o maíz, nopales y perejil frito',
-  },
-  {
-    id: 'tac-bistec',
-    name: 'Taco de Bistec',
-    price: 35.0,
-    category: 'tacos',
-    description: 'Tortilla harina o maíz, nopales y perejil frito',
-  },
-  {
-    id: 'tac-chorizo',
-    name: 'Taco de Chorizo',
-    price: 35.0,
-    category: 'tacos',
-    description: 'Tortilla harina o maíz, nopales y perejil frito',
-  },
-  {
-    id: 'tac-campechano',
-    name: 'Taco Campechano',
-    price: 35.0,
-    category: 'tacos',
-    description: 'Tortilla harina o maíz, nopales y perejil frito',
-  },
-  {
-    id: 'tac-chistorra',
-    name: 'Taco de Chistorra',
-    price: 35.0,
-    category: 'tacos',
-    description: 'Tortilla harina o maíz, nopales y perejil frito',
-  },
-  {
-    id: 'tac-chorizo-argentino',
-    name: 'Taco Chorizo Argentino',
-    price: 35.0,
-    category: 'tacos',
-    description: 'Tortilla harina o maíz, nopales y perejil frito',
-  },
+  // --- TACOS ($35 c/u) ---
+  { id: 'tac-arrachera', name: 'Taco de Arrachera', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
+  { id: 'tac-costilla', name: 'Taco de Costilla', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
+  { id: 'tac-enchilada', name: 'Taco de Carne Enchilada', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
+  { id: 'tac-bistec', name: 'Taco de Bistec', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
+  { id: 'tac-chorizo', name: 'Taco de Chorizo', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
+  { id: 'tac-campechano', name: 'Taco Campechano', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
+  { id: 'tac-chistorra', name: 'Taco de Chistorra', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
+  { id: 'tac-argentino', name: 'Taco de Chorizo Argentino', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
 
-  // --- ALITAS Y PAPAS (Página 3) ---
-  {
-    id: 'ali-6',
-    name: 'Alitas (Orden de 6)',
-    price: 80.0,
-    category: 'alitas_papas',
-    description: 'BBQ, BBQ Picante, Búfalo, Mango-Hab., Lemon Pepper o Ajo Parm.',
-  },
-  {
-    id: 'ali-12',
-    name: 'Alitas (Orden de 12)',
-    price: 140.0,
-    category: 'alitas_papas',
-    description: 'BBQ, BBQ Picante, Búfalo, Mango-Hab., Lemon Pepper o Ajo Parm.',
-  },
-  {
-    id: 'pap-sencillas',
-    name: 'Papas Sencillas',
-    price: 60.0,
-    category: 'alitas_papas',
-    description: 'Porción de papas a la francesa clásicas',
-  },
-  {
-    id: 'pap-boneless',
-    name: 'Papas con Boneless',
-    price: 130.0,
-    category: 'alitas_papas',
-    description: 'Papas francesas con boneless y 1 salsa a elegir',
-  },
-  {
-    id: 'pap-aros-bbq',
-    name: 'Papas c/ Aros de Cebolla y BBQ',
-    price: 110.0,
-    category: 'alitas_papas',
-    description: 'Papas francesas, aros de cebolla y salsa BBQ',
-  },
-
-  // --- BEBIDAS (Página 2) ---
-  {
-    id: 'beb-refresco',
-    name: 'Refresco',
-    price: 28.0,
-    category: 'bebidas',
-    description: 'Coca-Cola, Sangría, Manzanita, Squirt, 7up, Mirinda, Sprite, Boing...',
-  },
-  {
-    id: 'beb-agua-500',
-    name: 'Agua de Sabor (1/2 Litro)',
-    price: 26.0,
-    category: 'bebidas',
-    description: 'Horchata, Nuez, Jamaica, Limón c/ chía, Mojito, Jamaica s/ azúcar',
-  },
-  {
-    id: 'beb-agua-1000',
-    name: 'Agua Natural (1 Litro)',
-    price: 24.0,
-    category: 'bebidas',
-    description: 'Agua purificada natural 1L',
-  },
-  {
-    id: 'beb-cafe',
-    name: 'Café Americano',
-    price: 24.0,
-    category: 'bebidas',
-    description: 'Café americano caliente',
-  },
-
-  // --- EXTRAS / COMPLEMENTOS ---
-  {
-    id: 'ext-papas-150',
-    name: 'Complemento Papas (150 gr)',
-    price: 30.0,
-    category: 'extras',
-    description: 'Para acompañar hamburguesas o alitas (+150 gr)',
-  },
-  {
-    id: 'ext-queso-general',
-    name: 'Queso Extra',
-    price: 15.0,
-    category: 'extras',
-    description: 'Para Pambazo, Guajolota o Guajoloyet',
-  },
-  {
-    id: 'ext-guisado',
-    name: 'Guisado Extra',
-    price: 15.0,
-    category: 'extras',
-    description: 'Porción de guisado extra',
-  },
-  {
-    id: 'ext-queso-taco',
-    name: 'Con Queso (Extra Taco)',
-    price: 12.0,
-    category: 'extras',
-    description: 'Queso adicional para orden de taco',
-  },
-  {
-    id: 'ext-crema-pozole',
-    name: 'Crema Extra (Pozole)',
-    price: 10.0,
-    category: 'extras',
-    description: 'Porción extra de crema',
-  },
+  // --- PAPAS & BEBIDAS & EXTRAS ---
+  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'papas' || p.category === 'bebidas' || p.category === 'extras'),
 ];
 
 export const MOCK_PRODUCTS: Product[] = MOCK_PRODUCTS_GENERAL;
 
 export const getProductsByMode = (mode: 'general' | 'detailed'): Product[] => {
-  return mode === 'detailed' ? MOCK_PRODUCTS_DETAILED : MOCK_PRODUCTS_GENERAL;
+  return mode === 'general' ? MOCK_PRODUCTS_GENERAL : MOCK_PRODUCTS_DETAILED;
 };
 
 export const getCategoriesByMode = (mode: 'general' | 'detailed'): Category[] => {
-  return mode === 'detailed' ? CATEGORIES_DETAILED : CATEGORIES_GENERAL;
+  return mode === 'general' ? CATEGORIES_GENERAL : CATEGORIES_DETAILED;
 };
 
+export const getProductById = (id: string): Product | undefined => {
+  return MOCK_PRODUCTS_DETAILED.find(p => p.id === id) || MOCK_PRODUCTS_GENERAL.find(p => p.id === id);
+};

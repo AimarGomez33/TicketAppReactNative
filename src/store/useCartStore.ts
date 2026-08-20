@@ -13,22 +13,25 @@ import {
 } from '../services/supabaseService';
 import { isSupabaseConfigured } from '../config/supabaseConfig';
 
+export type KitchenStation = 'mexican' | 'american_tacos';
+
 export interface Product {
   id: string;
   name: string;
   price: number;
   category: string;
   description?: string;
+  kitchenStation?: KitchenStation;
 }
 
-export type ItemKitchenStatus = 'pending' | 'sent_to_kitchen';
+export type ItemKitchenStatus = 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready';
 
 export interface CartItem {
   product: Product;
   quantity: number;
   notes?: string; // Modificadores: "sin cebolla", "doble queso"
   round?: number; // Número de ronda (1, 2, 3...)
-  status?: ItemKitchenStatus; // 'pending' = Por preparar, 'sent_to_kitchen' = Enviado
+  status?: ItemKitchenStatus; // 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready'
   dbId?: string;
 }
 
@@ -71,7 +74,7 @@ interface CartState {
   tables: Record<string, TableOrder>; // Estado de todas las mesas
   ordersHistory: OrderHistoryItem[]; // Historial local de pagos
   
-  activeTab: 'tables' | 'ordering' | 'payment'; // Pantalla/Tab activa global
+  activeTab: 'tables' | 'ordering' | 'kitchen' | 'payment'; // Pantalla/Tab activa global
   
   appMode: AppVersionMode; // 'general' = versión simplificada, 'detailed' = versión detallada
   includePricesInTicket: boolean; // Controla si se imprimen los precios en el ticket
@@ -83,7 +86,7 @@ interface CartState {
   setIncludePricesInTicket: (include: boolean) => void;
   showCustomAlert: (alert: CustomAlertData) => void;
   hideCustomAlert: () => void;
-  setActiveTab: (tab: 'tables' | 'ordering' | 'payment') => void;
+  setActiveTab: (tab: 'tables' | 'ordering' | 'kitchen' | 'payment') => void;
   setRealtimeConnected: (connected: boolean) => void;
 
   // Acciones de Comanda Local y Sincronizada
@@ -94,6 +97,7 @@ interface CartState {
   setQuantity: (product: Product, quantity: number, notes?: string) => void;
   removeItem: (productId: string) => void;
   updateItemNotes: (productId: string, notes: string) => void;
+  updateItemKitchenStatus: (tableNumber: string, productId: string, status: ItemKitchenStatus) => void;
   clearCart: () => void;
   getTotal: () => number;
   getItemCount: () => number;
@@ -119,7 +123,7 @@ const initialTables = (): Record<string, TableOrder> => {
   for (let i = 1; i <= 12; i++) {
     t[i.toString()] = { status: 'free', cart: {}, currentRound: 1 };
   }
-  t['Llevar'] = { status: 'free', cart: {}, currentRound: 1 };
+  t.Llevar = { status: 'free', cart: {}, currentRound: 1 };
   return t;
 };
 
@@ -228,7 +232,34 @@ export const useCartStore = create<CartState>((set, get) => ({
         });
       },
       (orderUpdate) => {
-        // Manejar actualización de órdenes si es necesario
+        set((state) => {
+          const tbl = orderUpdate.tableNumber;
+          if (!tbl) return state;
+
+          const updatedTables = { ...state.tables };
+
+          // Si la orden fue cobrada o cancelada en otra terminal / caja
+          if (orderUpdate.status === 'paid' || orderUpdate.status === 'cancelled') {
+            if (updatedTables[tbl]) {
+              updatedTables[tbl] = {
+                ...updatedTables[tbl],
+                status: 'free',
+                cart: {},
+                currentRound: 1,
+                lastUpdated: new Date().toLocaleTimeString(),
+              };
+            }
+
+            // Si es la mesa actualmente abierta, vaciar el carrito
+            const isCurrentTable = state.tableNumber === tbl;
+            return {
+              tables: updatedTables,
+              cart: isCurrentTable ? {} : state.cart,
+            };
+          }
+
+          return { tables: updatedTables };
+        });
       }
     );
   },
@@ -470,6 +501,31 @@ export const useCartStore = create<CartState>((set, get) => ({
       return {
         cart: updatedCart,
         tables: updatedTables,
+      };
+    }),
+
+  updateItemKitchenStatus: (tableNumber, productId, status) =>
+    set((state) => {
+      const updatedTables = { ...state.tables };
+      const tableOrder = updatedTables[tableNumber];
+      if (!tableOrder || !tableOrder.cart[productId]) return state;
+
+      const updatedCart = {
+        ...tableOrder.cart,
+        [productId]: {
+          ...tableOrder.cart[productId],
+          status,
+        },
+      };
+
+      updatedTables[tableNumber] = {
+        ...tableOrder,
+        cart: updatedCart,
+      };
+
+      return {
+        tables: updatedTables,
+        cart: state.tableNumber === tableNumber ? updatedCart : state.cart,
       };
     }),
 

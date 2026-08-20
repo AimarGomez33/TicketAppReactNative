@@ -1,0 +1,53 @@
+name: CI - Continuous Integration
+
+on:
+  push:
+    branches: [main, develop, master]
+  pull_request:
+    branches: [main, develop, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-test:
+    name: Lint, Typecheck & Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ⚡ Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: 📦 Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🔍 TypeScript Static Typecheck
+        run: pnpm typecheck
+
+      - name: 🧹 ESLint Code Quality Check
+        run: pnpm run lint
+
+      - name: 🧪 Run Unit Tests with Coverage
+        run: pnpm test --coverage --maxWorkers=2
+
+      - name: 📊 Upload Coverage Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: code-coverage-report
+          path: coverage/
+          retention-days: 14
+
+      - name: 🛡️ Security Audit
+        run: pnpm audit --prod
+        continue-on-error: true

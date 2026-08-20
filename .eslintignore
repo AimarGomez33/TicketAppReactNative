@@ -1,0 +1,6 @@
+coverage/
+android/
+ios/
+node_modules/
+dist/
+build/

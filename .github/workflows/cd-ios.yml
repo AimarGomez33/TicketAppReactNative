@@ -1,0 +1,67 @@
+name: CD - iOS Continuous Deployment
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Entorno de despliegue'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  build-ios-release:
+    name: Build & Archive iOS Release (IPA)
+    runs-on: macos-14
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ⚡ Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: 📦 Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 💎 Setup Ruby & CocoaPods
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: 🔑 Inject Environment Variables (.env)
+        env:
+          SUPABASE_URL_PROD: ${{ secrets.SUPABASE_URL_PROD || secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY_PROD: ${{ secrets.SUPABASE_ANON_KEY_PROD || secrets.SUPABASE_ANON_KEY }}
+          RESTAURANT_NAME: ${{ secrets.RESTAURANT_NAME }}
+          PRINTER_HOST: ${{ secrets.PRINTER_HOST }}
+          PRINTER_PORT: ${{ secrets.PRINTER_PORT }}
+        run: |
+          echo "SUPABASE_URL=${SUPABASE_URL_PROD:-https://saywxawfatcewxakwbyi.supabase.co}" >> .env
+          echo "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY_PROD:-sb_publishable_oi5ejOEP4erfTlqZLNdmLQ_ml-LJnCs}" >> .env
+          echo "RESTAURANT_NAME=\"${RESTAURANT_NAME:-Antojitos Mexicanos Margarita}\"" >> .env
+          echo "PRINTER_HOST=${PRINTER_HOST:-192.168.100.200}" >> .env
+          echo "PRINTER_PORT=${PRINTER_PORT:-9100}" >> .env
+
+      - name: 🍎 Install CocoaPods Dependencies
+        working-directory: ios
+        run: |
+          pod install
+
+      - name: 🏗️ Verify iOS Build Configuration
+        working-directory: ios
+        run: |
+          xcodebuild -workspace TicketAppPOS.xcworkspace -scheme TicketAppPOS -configuration Release clean -showBuildSettings | grep PRODUCT_NAME || true

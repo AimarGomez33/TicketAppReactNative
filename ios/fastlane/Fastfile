@@ -1,0 +1,17 @@
+# ios/fastlane/Fastfile
+default_platform(:ios)
+
+platform :ios do
+  desc "Push a new beta build to TestFlight"
+  lane :beta do
+    increment_build_number(xcodeproj: "TicketAppPOS.xcodeproj")
+    build_app(workspace: "TicketAppPOS.xcworkspace", scheme: "TicketAppPOS")
+    # upload_to_testflight
+  end
+
+  desc "Push a new release to the App Store"
+  lane :release do
+    build_app(workspace: "TicketAppPOS.xcworkspace", scheme: "TicketAppPOS")
+    # upload_to_app_store
+  end
+end

@@ -12,7 +12,6 @@ import { useCartStore } from '../store/useCartStore';
 import {
   ChevronUp,
   Trash2,
-  Printer,
   Receipt,
   Tag,
   Send,

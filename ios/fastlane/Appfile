@@ -1,0 +1,5 @@
+# ios/fastlane/Appfile
+app_identifier("com.ticketapppos")
+apple_id("") # Tu Apple ID email
+itc_team_id("") # App Store Connect Team ID
+team_id("") # Developer Portal Team ID
