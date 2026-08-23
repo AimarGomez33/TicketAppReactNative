@@ -1,11 +1,6 @@
 // src/data/mockupMenu.ts
-import { Product } from '../store/useCartStore';
-
-export interface Category {
-  id: string;
-  name: string;
-  station: 'mexican' | 'american_tacos' | 'all';
-}
+import { Product, Category } from '../store/useCartStore';
+export type { Category };
 
 export const CATEGORIES_DETAILED: Category[] = [
   { id: 'top', name: 'Populares', station: 'all' },
@@ -161,12 +156,28 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     description: 'Papa, salsa, lechuga, queso rallado y 1 guisado',
   },
   {
+    id: 'gen-pambazo-nat-queso',
+    name: 'Pambazo Natural con Queso',
+    price: 53.0,
+    category: 'pambazos',
+    kitchenStation: 'mexican',
+    description: 'Pambazo natural + Queso Oaxaca fundido ($38 + $15)',
+  },
+  {
     id: 'gen-pambazo-adob',
     name: 'Pambazo Adobado',
     price: 43.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
     description: 'Papa, salsa, lechuga, queso rallado y 1 guisado',
+  },
+  {
+    id: 'gen-pambazo-adob-queso',
+    name: 'Pambazo Adobado con Queso',
+    price: 58.0,
+    category: 'pambazos',
+    kitchenStation: 'mexican',
+    description: 'Pambazo adobado + Queso Oaxaca fundido ($43 + $15)',
   },
   {
     id: 'gen-pambazo-nat-comb',
@@ -326,6 +337,15 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   },
 
   // --- EXTRAS ---
+  {
+    id: 'ext-personalizado',
+    name: 'Extra Personalizado',
+    price: 0.0,
+    category: 'extras',
+    kitchenStation: 'mexican',
+    isCustomPrice: true,
+    description: 'Monto y descripción libre definido al momento por el operador',
+  },
   {
     id: 'ext-papas-combo',
     name: 'Extra: Con Papas',

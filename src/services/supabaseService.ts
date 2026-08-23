@@ -2,7 +2,7 @@
 import 'react-native-url-polyfill/auto';
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { SUPABASE_CONFIG, isSupabaseConfigured } from '../config/supabaseConfig';
-import { CartItem, TableStatus } from '../store/useCartStore';
+import { CartItem, TableStatus, Product, Category } from '../store/useCartStore';
 
 let supabaseClient: SupabaseClient | null = null;
 let realtimeChannel: RealtimeChannel | null = null;
@@ -355,11 +355,77 @@ export const clearTableInSupabase = async (tableNumber: string): Promise<boolean
 };
 
 /**
- * Suscripción en Tiempo Real a eventos de mesas y órdenes
+ * Carga las categorías activas del menú desde Supabase
+ */
+export const fetchMenuCategoriesFromSupabase = async (): Promise<Category[] | null> => {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('menu_categories')
+      .select('id, name, icon_name, sort_order')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      console.warn('Error fetching categories from Supabase:', error.message);
+      return null;
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      iconName: row.icon_name,
+      sortOrder: row.sort_order,
+    }));
+  } catch (err) {
+    console.warn('Network error fetching categories from Supabase:', err);
+    return null;
+  }
+};
+
+/**
+ * Carga los platillos / productos activos del menú desde Supabase
+ */
+export const fetchMenuProductsFromSupabase = async (): Promise<Product[] | null> => {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('menu_products')
+      .select('id, name, price, category_id, description, kitchen_station, is_custom_price, sort_order')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      console.warn('Error fetching products from Supabase:', error.message);
+      return null;
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      price: Number(row.price),
+      category: row.category_id || 'extras',
+      description: row.description || '',
+      kitchenStation: row.kitchen_station as any,
+      isCustomPrice: Boolean(row.is_custom_price),
+    }));
+  } catch (err) {
+    console.warn('Network error fetching products from Supabase:', err);
+    return null;
+  }
+};
+
+/**
+ * Suscripción en Tiempo Real a eventos de mesas, órdenes y menú
  */
 export const subscribeToRealtimeChanges = (
   onTableChange: (table: RemoteTableUpdate) => void,
-  onOrderChange?: (order: RemoteOrderUpdate) => void
+  onOrderChange?: (order: RemoteOrderUpdate) => void,
+  onMenuChange?: () => void
 ): (() => void) => {
   const supabase = getSupabase();
   if (!supabase) {
@@ -402,6 +468,20 @@ export const subscribeToRealtimeChanges = (
             paymentMethod: row.payment_method,
           });
         }
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'menu_products' },
+      () => {
+        if (onMenuChange) onMenuChange();
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'menu_categories' },
+      () => {
+        if (onMenuChange) onMenuChange();
       }
     )
     .subscribe();

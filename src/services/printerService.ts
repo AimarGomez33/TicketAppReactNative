@@ -2,10 +2,11 @@
 import TcpSocket from 'react-native-tcp-socket';
 import { Buffer } from 'buffer';
 import { CartItem } from '../store/useCartStore';
+import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 
 const PRINTER_CONFIG = {
-  host: '192.168.100.200',
-  port: 9100,
+  host: SUPABASE_CONFIG.printerHost,
+  port: SUPABASE_CONFIG.printerPort,
   timeout: 3500,
 };
 
@@ -66,7 +67,8 @@ export const generateEscPosBuffer = (
   addBytes(ESC_POS.ALIGN_CENTER);
   addBytes(ESC_POS.TXT_BOLD_ON);
   addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
-  addText('ANTOJITOS MEXICANOS MARGARITA\n');
+  const headerName = (SUPABASE_CONFIG.restaurantName || 'TICKET APP POS').toUpperCase();
+  addText(`${headerName}\n`);
   addBytes(ESC_POS.TXT_NORMAL);
   addBytes(ESC_POS.TXT_BOLD_OFF);
 

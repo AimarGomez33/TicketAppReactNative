@@ -52,6 +52,8 @@ export const QuickSaleView: React.FC = () => {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
 
   const appMode = useCartStore((state) => state.appMode);
+  const menuProducts = useCartStore((state) => state.menuProducts);
+  const menuCategories = useCartStore((state) => state.menuCategories);
   const quickSaleCart = useCartStore((state) => state.quickSaleCart);
   const editingQuickSaleOrderId = useCartStore((state) => state.editingQuickSaleOrderId);
   const ordersHistory = useCartStore((state) => state.ordersHistory);
@@ -80,7 +82,9 @@ export const QuickSaleView: React.FC = () => {
 
   // Filtrado reactivo de productos del menú
   const availableProducts = useMemo(() => {
-    const products = getProductsByMode(appMode);
+    const products = (menuProducts && menuProducts.length > 0)
+      ? menuProducts
+      : getProductsByMode(appMode);
     return products.filter((p: Product) => {
       if (searchQuery.trim().length > 0) {
         const q = searchQuery.toLowerCase().trim();
@@ -92,16 +96,19 @@ export const QuickSaleView: React.FC = () => {
       if (selectedCategory === 'all') return true;
       return p.category === selectedCategory;
     });
-  }, [appMode, searchQuery, selectedCategory]);
+  }, [appMode, menuProducts, searchQuery, selectedCategory]);
 
   const openQuantityModal = (product: Product) => {
     setModalProduct(product);
     setModalVisible(true);
   };
 
-  const handleModalConfirm = (qty: number, notes: string) => {
+  const handleModalConfirm = (qty: number, notes: string, customPrice?: number, customName?: string) => {
     if (modalProduct) {
-      setQuickSaleQuantity(modalProduct, qty, notes);
+      const effectiveProduct = (customPrice !== undefined || customName)
+        ? { ...modalProduct, price: customPrice !== undefined ? customPrice : modalProduct.price, name: customName || modalProduct.name }
+        : modalProduct;
+      setQuickSaleQuantity(effectiveProduct, qty, notes);
     }
     setModalVisible(false);
   };
@@ -355,7 +362,7 @@ export const QuickSaleView: React.FC = () => {
                   Todos
                 </Text>
               </TouchableOpacity>
-              {CATEGORIES_GENERAL.filter((c) => c.id !== 'top').map((cat) => (
+              {(menuCategories && menuCategories.length > 0 ? menuCategories : CATEGORIES_GENERAL).filter((c) => c.id !== 'top').map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
                   style={[

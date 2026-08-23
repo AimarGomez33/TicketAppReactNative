@@ -9,12 +9,23 @@ import {
   finalizePaymentInSupabase,
   clearTableInSupabase,
   subscribeToRealtimeChanges,
+  fetchMenuCategoriesFromSupabase,
+  fetchMenuProductsFromSupabase,
   RemoteTableUpdate,
 } from '../services/supabaseService';
 import { isSupabaseConfigured } from '../config/supabaseConfig';
 import { printTicketTCP } from '../services/printerService';
+import { MOCK_PRODUCTS_GENERAL, CATEGORIES_GENERAL } from '../data/mockupMenu';
 
 export type KitchenStation = 'mexican' | 'american_tacos';
+
+export interface Category {
+  id: string;
+  name: string;
+  station?: 'mexican' | 'american_tacos' | 'all';
+  iconName?: string;
+  sortOrder?: number;
+}
 
 export interface Product {
   id: string;
@@ -23,6 +34,7 @@ export interface Product {
   category: string;
   description?: string;
   kitchenStation?: KitchenStation;
+  isCustomPrice?: boolean;
 }
 
 export type ItemKitchenStatus = 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready';
@@ -130,6 +142,12 @@ interface CartState {
   reprintQuickSaleOrder: (orderId: string) => Promise<boolean>;
   finalizeQuickSale: (paymentMethod?: 'cash' | 'card' | 'transfer', amountPaid?: number, change?: number) => Promise<boolean>;
 
+  // Catálogo de Menú y Extras Personalizados
+  menuProducts: Product[];
+  menuCategories: Category[];
+  loadMenuFromRemote: () => Promise<void>;
+  addCustomExtraItem: (price: number, name?: string, notes?: string, isQuickSale?: boolean) => void;
+
   // Inicialización y Sincronización Supabase
   initializeTables: () => void;
   initRealtimeSync: () => void;
@@ -171,6 +189,46 @@ export const useCartStore = create<CartState>((set, get) => ({
   customAlert: null,
   isRealtimeConnected: false,
 
+  // Catálogo de Menú y Categorías
+  menuProducts: MOCK_PRODUCTS_GENERAL,
+  menuCategories: CATEGORIES_GENERAL,
+
+  loadMenuFromRemote: async () => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const [remoteCats, remoteProds] = await Promise.all([
+        fetchMenuCategoriesFromSupabase(),
+        fetchMenuProductsFromSupabase(),
+      ]);
+
+      if (remoteCats && remoteCats.length > 0) {
+        set({ menuCategories: remoteCats });
+      }
+      if (remoteProds && remoteProds.length > 0) {
+        set({ menuProducts: remoteProds });
+      }
+    } catch (err) {
+      console.warn('Could not load remote menu, using cached/fallback:', err);
+    }
+  },
+
+  addCustomExtraItem: (price: number, name = 'Extra Personalizado', notes = '', isQuickSale = false) => {
+    const customProduct: Product = {
+      id: `ext-custom-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      name: name.trim() || 'Extra Personalizado',
+      price: Math.max(0, price),
+      category: 'extras',
+      kitchenStation: 'mexican',
+      isCustomPrice: true,
+    };
+
+    if (isQuickSale) {
+      get().addQuickSaleItem(customProduct, 1, notes);
+    } else {
+      get().addQuantity(customProduct, 1, notes);
+    }
+  },
+
   setAppMode: (appMode) => {
     set({
       appMode,
@@ -188,6 +246,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (Object.keys(get().tables).length === 0) {
       set({ tables: initialTables() });
     }
+    get().loadMenuFromRemote();
   },
 
   // Inicializar suscripción y carga en tiempo real desde Supabase
@@ -196,7 +255,10 @@ export const useCartStore = create<CartState>((set, get) => ({
       return;
     }
 
-    // 1. Cargar estado inicial
+    // 0. Cargar menú remoto
+    get().loadMenuFromRemote();
+
+    // 1. Cargar estado inicial de mesas
     fetchRemoteTables().then((remoteTables) => {
       if (remoteTables) {
         set((state) => {
@@ -281,6 +343,9 @@ export const useCartStore = create<CartState>((set, get) => ({
 
           return { tables: updatedTables };
         });
+      },
+      () => {
+        get().loadMenuFromRemote();
       }
     );
   },

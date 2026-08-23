@@ -18,10 +18,13 @@ export const POSScreen: React.FC = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('top');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const appMode = useCartStore(state => state.appMode);
+  const menuProducts = useCartStore(state => state.menuProducts);
 
   // Filtrado reactivo instantáneo por categoría, modo de app y live search
   const filteredProducts = useMemo(() => {
-    const products = getProductsByMode(appMode);
+    const products = (menuProducts && menuProducts.length > 0)
+      ? menuProducts
+      : getProductsByMode(appMode);
 
     return products.filter((product: Product) => {
       // Si hay texto de búsqueda, busca en nombre y descripción

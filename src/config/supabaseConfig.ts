@@ -1,13 +1,16 @@
 // src/config/supabaseConfig.ts
-import { SUPABASE_URL, SUPABASE_ANON_KEY, RESTAURANT_NAME } from '@env';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, RESTAURANT_NAME, PRINTER_HOST, PRINTER_PORT } from '@env';
 
 export const SUPABASE_CONFIG = {
-  // URL base de tu proyecto en Supabase (desde archivo .env)
+  // URL base de tu proyecto en Supabase (desde archivo .env privado)
   url: SUPABASE_URL || '',
-  // Tu publishable / anon key pública (desde archivo .env)
+  // Tu publishable / anon key pública (desde archivo .env privado)
   anonKey: SUPABASE_ANON_KEY || '',
-  // Identificador de la sucursal o terminal
-  restaurantName: RESTAURANT_NAME || 'Antojitos Mexicanos Margarita',
+  // Nombre del restaurante o negocio (configurable en .env)
+  restaurantName: RESTAURANT_NAME || 'Ticket App POS',
+  // Configuración de Impresora Térmica de Red
+  printerHost: PRINTER_HOST || '192.168.100.200',
+  printerPort: PRINTER_PORT ? parseInt(PRINTER_PORT, 10) : 9100,
 };
 
 export const isSupabaseConfigured = (): boolean => {

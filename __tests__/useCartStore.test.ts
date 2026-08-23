@@ -109,4 +109,37 @@ describe('useCartStore - Multi-Cocina y POS Tests', () => {
     expect(stateFinal.ordersHistory[0].items).toHaveLength(3);
     expect(stateFinal.ordersHistory[0].lastModified).toBeDefined();
   });
+
+  test('Debe incluir los nuevos pambazos con queso con su precio calculado (Base + $15)', () => {
+    const store = useCartStore.getState();
+    const pambazoNatQueso = store.menuProducts.find(p => p.id === 'gen-pambazo-nat-queso')!;
+    const pambazoAdobQueso = store.menuProducts.find(p => p.id === 'gen-pambazo-adob-queso')!;
+
+    expect(pambazoNatQueso).toBeDefined();
+    expect(pambazoNatQueso.price).toBe(53.0); // $38 + $15
+
+    expect(pambazoAdobQueso).toBeDefined();
+    expect(pambazoAdobQueso.price).toBe(58.0); // $43 + $15
+
+    // Agregar ambos
+    store.addQuantity(pambazoNatQueso, 1);
+    store.addQuantity(pambazoAdobQueso, 1);
+
+    expect(useCartStore.getState().getTotal()).toBe(111.0); // 53 + 58
+  });
+
+  test('Debe permitir agregar Extra Personalizado con precio abierto y descripción', () => {
+    const store = useCartStore.getState();
+    store.clearCart();
+
+    // Agregar extra con precio personalizado de $25.50
+    store.addCustomExtraItem(25.50, 'Porción Doble de Guacamole', 'bien frío', false);
+
+    const items = Object.values(useCartStore.getState().cart);
+    expect(items).toHaveLength(1);
+    expect(items[0].product.name).toBe('Porción Doble de Guacamole');
+    expect(items[0].product.price).toBe(25.50);
+    expect(items[0].notes).toBe('bien frío');
+    expect(useCartStore.getState().getTotal()).toBe(25.50);
+  });
 });

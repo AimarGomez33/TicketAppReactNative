@@ -8,7 +8,10 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "build:apk": "cd android && ./gradlew assembleRelease",
+    "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
+    "deploy": "cd android && ./gradlew assembleRelease && cd .. && adb install -r android/app/build/outputs/apk/release/app-release.apk"
   },
   "dependencies": {
     "@react-native/new-app-screen": "0.86.2",
@@ -43,6 +46,7 @@
     "prettier": "2.8.8",
     "react-native-dotenv": "^4.1.1",
     "react-test-renderer": "19.2.3",
+    "supabase": "^2.115.0",
     "typescript": "^5.9.3"
   },
   "engines": {

@@ -18,7 +18,7 @@ interface Props {
   currentQuantity: number;
   currentNotes?: string;
   onClose: () => void;
-  onConfirm: (quantity: number, notes: string) => void;
+  onConfirm: (quantity: number, notes: string, customPrice?: number, customName?: string) => void;
 }
 
 const PRESET_ADD_AMOUNTS = [5, 10, 20, 30, 40, 50];
@@ -33,15 +33,25 @@ export const QuantityModal: React.FC<Props> = ({
 }) => {
   const [quantity, setQuantity] = useState<number>(1);
   const [notes, setNotes] = useState<string>('');
+  const [customPriceStr, setCustomPriceStr] = useState<string>('');
+  const [customName, setCustomName] = useState<string>('');
 
   useEffect(() => {
-    if (visible) {
+    if (visible && product) {
       setQuantity(currentQuantity > 0 ? currentQuantity : 1);
       setNotes(currentNotes || '');
+      setCustomPriceStr(product.price > 0 ? product.price.toString() : '');
+      setCustomName(product.name || 'Extra Personalizado');
     }
-  }, [visible, currentQuantity, currentNotes]);
+  }, [visible, currentQuantity, currentNotes, product]);
 
   if (!product) return null;
+
+  const isCustomPriceMode = Boolean(product.isCustomPrice);
+  const parsedCustomPrice = parseFloat(customPriceStr);
+  const effectivePrice = isCustomPriceMode
+    ? isNaN(parsedCustomPrice) ? 0 : parsedCustomPrice
+    : product.price;
 
   const handleQuickAdd = (amount: number) => {
     setQuantity(prev => prev + amount);
@@ -52,7 +62,12 @@ export const QuantityModal: React.FC<Props> = ({
   };
 
   const handleConfirm = () => {
-    onConfirm(Math.max(0, quantity), notes.trim());
+    onConfirm(
+      Math.max(0, quantity),
+      notes.trim(),
+      isCustomPriceMode ? effectivePrice : undefined,
+      isCustomPriceMode ? customName.trim() : undefined
+    );
     onClose();
   };
 
@@ -69,10 +84,10 @@ export const QuantityModal: React.FC<Props> = ({
           <View style={styles.header}>
             <View style={styles.headerTextContainer}>
               <Text style={styles.productName} numberOfLines={1}>
-                {product.name}
+                {isCustomPriceMode ? (customName || 'Extra Personalizado') : product.name}
               </Text>
               <Text style={styles.productPrice}>
-                ${product.price.toFixed(2)} c/u • Subtotal: ${(product.price * quantity).toFixed(2)}
+                ${effectivePrice.toFixed(2)} c/u • Subtotal: ${(effectivePrice * quantity).toFixed(2)}
               </Text>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
@@ -81,6 +96,31 @@ export const QuantityModal: React.FC<Props> = ({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Input Especial de Precio Personalizado */}
+            {isCustomPriceMode && (
+              <View style={styles.customPriceSection}>
+                <Text style={styles.sectionLabel}>PRECIO UNITARIO ($)</Text>
+                <TextInput
+                  style={styles.customPriceInput}
+                  placeholder="0.00"
+                  placeholderTextColor="#8e6e79"
+                  keyboardType="numeric"
+                  value={customPriceStr}
+                  onChangeText={setCustomPriceStr}
+                  selectTextOnFocus
+                />
+
+                <Text style={[styles.sectionLabel, { marginTop: 10 }]}>NOMBRE / CONCEPTO</Text>
+                <TextInput
+                  style={styles.customNameInput}
+                  placeholder="Ej. Guacamole extra, Envío, etc."
+                  placeholderTextColor="#8e6e79"
+                  value={customName}
+                  onChangeText={setCustomName}
+                />
+              </View>
+            )}
+
             {/* Selector de Cantidad Central */}
             <View style={styles.counterSection}>
               <Text style={styles.sectionLabel}>CANTIDAD TOTAL</Text>
@@ -240,6 +280,36 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: 16,
     backgroundColor: '#ffe8ee',
+  },
+  customPriceSection: {
+    backgroundColor: '#fff0f3',
+    borderColor: '#b3006c',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+  },
+  customPriceInput: {
+    backgroundColor: '#ffffff',
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#b3006c',
+    textAlign: 'center',
+  },
+  customNameInput: {
+    backgroundColor: '#ffffff',
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#27171d',
   },
   counterSection: {
     alignItems: 'center',

@@ -1,9 +1,6 @@
 name: CD - iOS Continuous Deployment
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       environment:
@@ -50,10 +47,10 @@ jobs:
           PRINTER_HOST: ${{ secrets.PRINTER_HOST }}
           PRINTER_PORT: ${{ secrets.PRINTER_PORT }}
         run: |
-          echo "SUPABASE_URL=${SUPABASE_URL_PROD:-https://saywxawfatcewxakwbyi.supabase.co}" >> .env
-          echo "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY_PROD:-sb_publishable_oi5ejOEP4erfTlqZLNdmLQ_ml-LJnCs}" >> .env
-          echo "RESTAURANT_NAME=\"${RESTAURANT_NAME:-Antojitos Mexicanos Margarita}\"" >> .env
-          echo "PRINTER_HOST=${PRINTER_HOST:-192.168.100.200}" >> .env
+          echo "SUPABASE_URL=${SUPABASE_URL_PROD}" >> .env
+          echo "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY_PROD}" >> .env
+          echo "RESTAURANT_NAME=\"${RESTAURANT_NAME:-Ticket App POS}\"" >> .env
+          echo "PRINTER_HOST=${PRINTER_HOST:-192.168.1.200}" >> .env
           echo "PRINTER_PORT=${PRINTER_PORT:-9100}" >> .env
 
       - name: 🍎 Install CocoaPods Dependencies

@@ -9,6 +9,7 @@ import { KitchenScreen } from './KitchenScreen';
 import { useCartStore } from '../store/useCartStore';
 import { Table, UtensilsCrossed, CreditCard, Sparkles, Radio, ChefHat } from 'lucide-react-native';
 import { CustomAlertModal } from '../components/CustomAlertModal';
+import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 
 type ScreenId = 'tables' | 'ordering' | 'kitchen' | 'payment';
 
@@ -38,7 +39,7 @@ export function StitchGalleryScreen() {
         <View style={styles.headerMain}>
           <View style={styles.headerTitleContainer}>
             <View style={styles.titleRow}>
-              <Text style={styles.eyebrow} numberOfLines={1}>POS MARGARITA</Text>
+              <Text style={styles.eyebrow} numberOfLines={1}>POS TERMINAL</Text>
               {isRealtimeConnected ? (
                 <View style={styles.liveBadge}>
                   <Radio size={9} color="#059669" />
@@ -51,7 +52,7 @@ export function StitchGalleryScreen() {
               )}
             </View>
             <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
-              Antojitos Mexicanos Margarita
+              {SUPABASE_CONFIG.restaurantName || 'Ticket App POS'}
             </Text>
           </View>
 

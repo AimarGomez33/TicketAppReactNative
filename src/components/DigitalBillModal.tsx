@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { CartItem } from '../store/useCartStore';
+import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 import { Smartphone, BellRing, X } from 'lucide-react-native';
 
 interface Props {
@@ -55,7 +56,7 @@ export const DigitalBillModal: React.FC<Props> = ({
           {/* Ticket Digital Simulado */}
           <View style={styles.ticketPaper}>
             <View style={styles.ticketHeader}>
-              <Text style={styles.restaurantName}>ANTOJITOS MEXICANOS MARGARITA</Text>
+              <Text style={styles.restaurantName}>{(SUPABASE_CONFIG.restaurantName || 'TICKET APP POS').toUpperCase()}</Text>
               <Text style={styles.tableBadge}>MESA {tableNumber.toUpperCase()}</Text>
               <Text style={styles.ticketDate}>{new Date().toLocaleTimeString()}</Text>
             </View>

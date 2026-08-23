@@ -20,8 +20,11 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
   const quantity = cartItem ? cartItem.quantity : 0;
   const notes = cartItem?.notes;
 
-  const handleModalConfirm = (newQty: number, newNotes: string) => {
-    setQuantity(product, newQty, newNotes);
+  const handleModalConfirm = (newQty: number, newNotes: string, customPrice?: number, customName?: string) => {
+    const effectiveProduct = (customPrice !== undefined || customName)
+      ? { ...product, price: customPrice !== undefined ? customPrice : product.price, name: customName || product.name }
+      : product;
+    setQuantity(effectiveProduct, newQty, newNotes);
     setModalVisible(false);
   };
 
