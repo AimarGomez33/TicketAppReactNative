@@ -21,6 +21,9 @@ import {
   CheckCircle2,
   Clock,
   Utensils,
+  UtensilsCrossed,
+  Flame,
+  FileText,
   Layers,
 } from 'lucide-react-native';
 
@@ -160,7 +163,7 @@ export const KitchenScreen: React.FC = () => {
           onPress={() => setSelectedStation('mexican')}
           activeOpacity={0.75}
         >
-          <Text style={styles.emojiIcon}>🇲🇽</Text>
+          <UtensilsCrossed size={14} color={selectedStation === 'mexican' ? '#ffffff' : '#5a3f49'} />
           <Text
             style={[
               styles.stationButtonText,
@@ -180,7 +183,7 @@ export const KitchenScreen: React.FC = () => {
           onPress={() => setSelectedStation('american_tacos')}
           activeOpacity={0.75}
         >
-          <Text style={styles.emojiIcon}>🍔🌮</Text>
+          <Flame size={14} color={selectedStation === 'american_tacos' ? '#ffffff' : '#5a3f49'} />
           <Text
             style={[
               styles.stationButtonText,
@@ -285,9 +288,12 @@ export const KitchenScreen: React.FC = () => {
                           {item.product.name}
                         </Text>
                         {item.notes ? (
-                          <Text style={styles.itemNotes}>
-                            📝 {item.notes}
-                          </Text>
+                          <View style={styles.notesContainer}>
+                            <FileText size={11} color="#b3006c" />
+                            <Text style={styles.itemNotes}>
+                              {item.notes}
+                            </Text>
+                          </View>
                         ) : null}
                       </View>
 
@@ -551,11 +557,16 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: '#6b7280',
   },
+  notesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
   itemNotes: {
     fontSize: 11.5,
     fontWeight: '600',
     color: '#b3006c',
-    marginTop: 2,
     fontStyle: 'italic',
   },
   statusPill: {

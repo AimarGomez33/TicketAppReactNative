@@ -18,8 +18,11 @@ import {
   Tag,
 } from 'lucide-react-native';
 import { printTicketTCP } from '../services/printerService';
+import { QuickSaleView } from '../components/QuickSaleView';
+import { UtensilsCrossed, Zap } from 'lucide-react-native';
 
 type PaymentMethod = 'cash' | 'card' | 'transfer';
+type CashierViewMode = 'table' | 'quick';
 
 export function PaymentScreen() {
   const tableNumber = useCartStore(state => state.tableNumber);
@@ -34,12 +37,19 @@ export function PaymentScreen() {
   const showCustomAlert = useCartStore(state => state.showCustomAlert);
 
   // Local state
+  const [cashierMode, setCashierMode] = useState<CashierViewMode>(tableNumber ? 'table' : 'quick');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [receivedCashStr, setReceivedCashStr] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const total = getTotal();
   const items = Object.values(cart);
+
+  useEffect(() => {
+    if (tableNumber && items.length > 0) {
+      setCashierMode('table');
+    }
+  }, [tableNumber, items.length]);
 
   useEffect(() => {
     if (paymentMethod !== 'cash') {
@@ -49,20 +59,94 @@ export function PaymentScreen() {
     }
   }, [paymentMethod, total]);
 
+  // Si está en modo Venta Rápida / Comanda Manual
+  if (cashierMode === 'quick') {
+    return (
+      <View style={styles.outerContainer}>
+        {/* Selector de Modo Superior */}
+        <View style={styles.modeSegmentBar}>
+          <TouchableOpacity
+            style={styles.segmentBtn}
+            onPress={() => setCashierMode('table')}
+            activeOpacity={0.75}
+          >
+            <UtensilsCrossed size={14} color="#5a3f49" />
+            <Text style={styles.segmentBtnText}>
+              {tableNumber ? `Mesa ${tableNumber.toUpperCase()}` : 'Cobro de Mesas'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.segmentBtn, styles.segmentBtnActive]}
+            onPress={() => setCashierMode('quick')}
+            activeOpacity={0.75}
+          >
+            <Zap size={14} color="#FFF" />
+            <Text style={[styles.segmentBtnText, styles.segmentBtnTextActive]}>
+              Venta Rápida / Mostrador
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <QuickSaleView />
+      </View>
+    );
+  }
+
   if (!tableNumber || items.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <XCircle size={48} color="#ba1a1a" />
-        <Text style={styles.emptyTitle}>Sin Mesa Seleccionada</Text>
-        <Text style={styles.emptyText}>
-          No hay una cuenta activa para cobrar. Selecciona una mesa con consumo desde la vista de mesas.
-        </Text>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => setActiveTab('tables')}
-        >
-          <Text style={styles.backButtonText}>IR A MESAS</Text>
-        </TouchableOpacity>
+      <View style={styles.outerContainer}>
+        {/* Selector de Modo Superior */}
+        <View style={styles.modeSegmentBar}>
+          <TouchableOpacity
+            style={[styles.segmentBtn, styles.segmentBtnActive]}
+            onPress={() => setCashierMode('table')}
+            activeOpacity={0.75}
+          >
+            <UtensilsCrossed size={14} color="#FFF" />
+            <Text style={[styles.segmentBtnText, styles.segmentBtnTextActive]}>
+              Cobro de Mesas
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.segmentBtn}
+            onPress={() => setCashierMode('quick')}
+            activeOpacity={0.75}
+          >
+            <Zap size={14} color="#5a3f49" />
+            <Text style={styles.segmentBtnText}>
+              Venta Rápida / Mostrador
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.emptyContainer}>
+          <XCircle size={48} color="#b3006c" />
+          <Text style={styles.emptyTitle}>Sin Mesa Seleccionada</Text>
+          <Text style={styles.emptyText}>
+            No hay una cuenta activa de mesa para cobrar. Puedes ir a la vista de mesas o abrir una comanda manual directa en Venta Rápida.
+          </Text>
+
+          <View style={styles.emptyButtonsRow}>
+            <TouchableOpacity
+              style={styles.quickSaleSwitchBtn}
+              onPress={() => setCashierMode('quick')}
+              activeOpacity={0.8}
+            >
+              <Zap size={16} color="#FFF" />
+              <Text style={styles.quickSaleSwitchBtnText}>VENTA RÁPIDA / MOSTRADOR</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => setActiveTab('tables')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.backButtonText}>IR A MESAS</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   }
@@ -173,7 +257,7 @@ export function PaymentScreen() {
                     {quantity}x {product.name}
                   </Text>
                   <Text style={styles.itemUnitPriceText}>
-                    ${product.price.toFixed(2)} c/u {notes ? `• 📝 ${notes}` : ''} {round ? `• R#${round}` : ''}
+                    ${product.price.toFixed(2)} c/u {notes ? `• Nota: ${notes}` : ''} {round ? `• R#${round}` : ''}
                   </Text>
                 </View>
                 <Text style={styles.itemPrice}>
@@ -442,6 +526,44 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 24,
   },
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#fff8f8',
+  },
+  modeSegmentBar: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffe0ea',
+    gap: 8,
+  },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#fff0f3',
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    gap: 6,
+  },
+  segmentBtnActive: {
+    backgroundColor: '#b3006c',
+    borderColor: '#b3006c',
+  },
+  segmentBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#5a3f49',
+  },
+  segmentBtnTextActive: {
+    color: '#ffffff',
+    fontWeight: '800',
+  },
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
@@ -466,16 +588,39 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 20,
   },
-  backButton: {
+  emptyButtonsRow: {
+    width: '100%',
+    gap: 10,
+    marginTop: 24,
+  },
+  quickSaleSwitchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#b3006c',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  quickSaleSwitchBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  backButton: {
+    backgroundColor: '#ffffff',
+    borderColor: '#ffe0ea',
+    borderWidth: 1.5,
     borderRadius: 20,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    marginTop: 24,
+    alignItems: 'center',
   },
   backButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
+    color: '#b3006c',
+    fontSize: 13,
     fontWeight: 'bold',
   },
   card: {

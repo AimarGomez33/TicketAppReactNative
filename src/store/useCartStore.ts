@@ -12,6 +12,7 @@ import {
   RemoteTableUpdate,
 } from '../services/supabaseService';
 import { isSupabaseConfigured } from '../config/supabaseConfig';
+import { printTicketTCP } from '../services/printerService';
 
 export type KitchenStation = 'mexican' | 'american_tacos';
 
@@ -50,10 +51,12 @@ export interface OrderHistoryItem {
   tableNumber: string;
   items: CartItem[];
   total: number;
-  paymentMethod: 'cash' | 'card' | 'transfer';
-  amountPaid: number;
-  change: number;
+  paymentMethod?: 'cash' | 'card' | 'transfer';
+  amountPaid?: number;
+  change?: number;
   timestamp: string;
+  orderType?: 'table' | 'quick_sale';
+  lastModified?: string;
 }
 
 export type AppVersionMode = 'general' | 'detailed';
@@ -111,6 +114,22 @@ interface CartState {
   // Flujo Operador -> Cobro
   completePayment: (paymentMethod: 'cash' | 'card' | 'transfer', amountPaid: number, change: number) => Promise<void>;
   
+  // Flujo Secundario: Venta Rápida / Comanda Manual en Caja
+  quickSaleCart: Record<string, CartItem>;
+  editingQuickSaleOrderId: string | null;
+  addQuickSaleItem: (product: Product, quantityToAdd?: number, notes?: string) => void;
+  setQuickSaleQuantity: (product: Product, quantity: number, notes?: string) => void;
+  removeQuickSaleItem: (productId: string) => void;
+  clearQuickSale: () => void;
+  getQuickSaleTotal: () => number;
+  getQuickSaleItemCount: () => number;
+  createQuickSaleOrder: (tableNumber?: string) => Promise<OrderHistoryItem | null>;
+  loadQuickSaleOrderForEdit: (orderId: string) => void;
+  cancelEditQuickSaleOrder: () => void;
+  updateAndSaveQuickSaleOrder: (orderId: string, tableNumber?: string) => Promise<boolean>;
+  reprintQuickSaleOrder: (orderId: string) => Promise<boolean>;
+  finalizeQuickSale: (paymentMethod?: 'cash' | 'card' | 'transfer', amountPaid?: number, change?: number) => Promise<boolean>;
+
   // Inicialización y Sincronización Supabase
   initializeTables: () => void;
   initRealtimeSync: () => void;
@@ -142,6 +161,8 @@ const debouncedSync = (tableNumber: string, items: CartItem[], total: number, wa
 export const useCartStore = create<CartState>((set, get) => ({
   tableNumber: '',
   cart: {},
+  quickSaleCart: {},
+  editingQuickSaleOrderId: null,
   tables: initialTables(),
   ordersHistory: [],
   activeTab: 'tables',
@@ -685,5 +706,201 @@ export const useCartStore = create<CartState>((set, get) => ({
         tableNumber: '',
       };
     });
+  },
+
+  // --- FLUJO SECUNDARIO: Venta Rápida / Comanda Manual en Caja ---
+  addQuickSaleItem: (product, quantityToAdd = 1, notes = '') => {
+    set((state) => {
+      const existing = state.quickSaleCart[product.id];
+      const newQty = existing ? existing.quantity + quantityToAdd : quantityToAdd;
+      if (newQty <= 0) {
+        const nextCart = { ...state.quickSaleCart };
+        delete nextCart[product.id];
+        return { quickSaleCart: nextCart };
+      }
+      return {
+        quickSaleCart: {
+          ...state.quickSaleCart,
+          [product.id]: {
+            product,
+            quantity: newQty,
+            notes: notes || existing?.notes || '',
+            status: 'ready',
+            round: 1,
+          },
+        },
+      };
+    });
+  },
+
+  setQuickSaleQuantity: (product, quantity, notes = '') => {
+    set((state) => {
+      if (quantity <= 0) {
+        const nextCart = { ...state.quickSaleCart };
+        delete nextCart[product.id];
+        return { quickSaleCart: nextCart };
+      }
+      return {
+        quickSaleCart: {
+          ...state.quickSaleCart,
+          [product.id]: {
+            product,
+            quantity,
+            notes,
+            status: 'ready',
+            round: 1,
+          },
+        },
+      };
+    });
+  },
+
+  removeQuickSaleItem: (productId) => {
+    set((state) => {
+      const nextCart = { ...state.quickSaleCart };
+      delete nextCart[productId];
+      return { quickSaleCart: nextCart };
+    });
+  },
+
+  clearQuickSale: () => {
+    set({ quickSaleCart: {} });
+  },
+
+  getQuickSaleTotal: () => {
+    const items = Object.values(get().quickSaleCart);
+    return items.reduce((sum, it) => sum + it.product.price * it.quantity, 0);
+  },
+
+  getQuickSaleItemCount: () => {
+    const items = Object.values(get().quickSaleCart);
+    return items.reduce((sum, it) => sum + it.quantity, 0);
+  },
+
+  createQuickSaleOrder: async (tableNumber = 'Llevar') => {
+    const state = get();
+    const items = Object.values(state.quickSaleCart);
+    if (items.length === 0) return null;
+
+    const total = state.getQuickSaleTotal();
+    const cleanTable = tableNumber.trim() || 'Llevar';
+    const orderId = `ORD-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+    const newOrder: OrderHistoryItem = {
+      id: orderId,
+      tableNumber: cleanTable,
+      items: [...items],
+      total,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      orderType: 'quick_sale',
+    };
+
+    if (isSupabaseConfigured()) {
+      await finalizePaymentInSupabase(cleanTable, 'cash', total, 0, total);
+    }
+
+    set((prev) => ({
+      quickSaleCart: {},
+      editingQuickSaleOrderId: null,
+      ordersHistory: [newOrder, ...prev.ordersHistory],
+    }));
+
+    return newOrder;
+  },
+
+  loadQuickSaleOrderForEdit: (orderId: string) => {
+    const state = get();
+    const order = state.ordersHistory.find((o) => o.id === orderId);
+    if (!order) return;
+
+    const cartMap: Record<string, CartItem> = {};
+    order.items.forEach((item) => {
+      cartMap[item.product.id] = { ...item };
+    });
+
+    set({
+      quickSaleCart: cartMap,
+      editingQuickSaleOrderId: orderId,
+    });
+  },
+
+  cancelEditQuickSaleOrder: () => {
+    set({
+      quickSaleCart: {},
+      editingQuickSaleOrderId: null,
+    });
+  },
+
+  updateAndSaveQuickSaleOrder: async (orderId: string, tableNumber?: string) => {
+    const state = get();
+    const items = Object.values(state.quickSaleCart);
+    if (items.length === 0) return false;
+
+    const total = state.getQuickSaleTotal();
+
+    set((prev) => ({
+      quickSaleCart: {},
+      editingQuickSaleOrderId: null,
+      ordersHistory: prev.ordersHistory.map((o) =>
+        o.id === orderId
+          ? {
+              ...o,
+              tableNumber: tableNumber !== undefined && tableNumber.trim().length > 0 ? tableNumber.trim() : o.tableNumber,
+              items: [...items],
+              total,
+              lastModified: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            }
+          : o
+      ),
+    }));
+
+    return true;
+  },
+
+  reprintQuickSaleOrder: async (orderId: string) => {
+    const state = get();
+    const order = state.ordersHistory.find((o) => o.id === orderId);
+    if (!order) return false;
+
+    await printTicketTCP(order.tableNumber, order.items, order.total, {
+      showPrices: true,
+      isReprint: true,
+      orderId: order.id,
+      paymentMethod: order.paymentMethod,
+      amountPaid: order.amountPaid,
+      change: order.change,
+    });
+
+    return true;
+  },
+
+  finalizeQuickSale: async (paymentMethod = 'cash', amountPaid = 0, change = 0) => {
+    const state = get();
+    const items = Object.values(state.quickSaleCart);
+    if (items.length === 0) return false;
+
+    const total = state.getQuickSaleTotal();
+    const newOrder: OrderHistoryItem = {
+      id: `MOSTR-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
+      tableNumber: 'MOSTRADOR',
+      items: [...items],
+      total,
+      paymentMethod,
+      amountPaid: amountPaid || total,
+      change: change || 0,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      orderType: 'quick_sale',
+    };
+
+    if (isSupabaseConfigured()) {
+      await finalizePaymentInSupabase('MOSTRADOR', paymentMethod || 'cash', amountPaid || total, change || 0, total);
+    }
+
+    set((prev) => ({
+      quickSaleCart: {},
+      editingQuickSaleOrderId: null,
+      ordersHistory: [newOrder, ...prev.ordersHistory],
+    }));
+
+    return true;
   },
 }));

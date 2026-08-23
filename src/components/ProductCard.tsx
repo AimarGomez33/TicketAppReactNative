@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Product, useCartStore } from '../store/useCartStore';
-import { Plus, Minus, Layers } from 'lucide-react-native';
+import { Plus, Minus, Layers, FileText } from 'lucide-react-native';
 import { QuantityModal } from './QuantityModal';
 
 interface Props {
@@ -13,7 +13,6 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
   const [modalVisible, setModalVisible] = useState(false);
   
   const addItem = useCartStore(state => state.addItem);
-  //const addQuantity = useCartStore(state => state.addQuantity);
   const setQuantity = useCartStore(state => state.setQuantity);
   const removeItem = useCartStore(state => state.removeItem);
   const cartItem = useCartStore(state => state.cart[product.id]);
@@ -21,10 +20,9 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
   const quantity = cartItem ? cartItem.quantity : 0;
   const notes = cartItem?.notes;
 
-  //const isChalupa = product.id === 'ant-chalupa' || product.id === 'gen-chalupa';
-
   const handleModalConfirm = (newQty: number, newNotes: string) => {
     setQuantity(product, newQty, newNotes);
+    setModalVisible(false);
   };
 
   return (
@@ -56,9 +54,12 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
           ) : null}
 
           {notes ? (
-            <Text style={styles.notesText} numberOfLines={1}>
-              📝 {notes}
-            </Text>
+            <View style={styles.notesRow}>
+              <FileText size={10} color="#b3006c" />
+              <Text style={styles.notesText} numberOfLines={1}>
+                {notes}
+              </Text>
+            </View>
           ) : null}
         </View>
 
@@ -191,11 +192,16 @@ const styles = StyleSheet.create({
     marginTop: 3,
     lineHeight: 13,
   },
+  notesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 3,
+  },
   notesText: {
     color: '#b3006c',
     fontSize: 10,
     fontWeight: '600',
-    marginTop: 3,
     fontStyle: 'italic',
   },
   footer: {

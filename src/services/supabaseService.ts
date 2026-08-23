@@ -220,7 +220,7 @@ export const syncActiveOrderToSupabase = async (
  */
 export const markRoundSentInSupabase = async (
   tableNumber: string,
-  //roundNumber: number
+  _roundNumber?: number
 ): Promise<boolean> => {
   const supabase = getSupabase();
   if (!supabase || !tableNumber) return false;

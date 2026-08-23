@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useCartStore } from '../store/useCartStore';
-import { Search, Printer, Wifi, Menu, Database } from 'lucide-react-native';
+import { Search, Printer, Wifi, Menu, Database, Utensils, Layers } from 'lucide-react-native';
 import { SupabaseConfigModal } from './SupabaseConfigModal';
 
 interface Props {
@@ -82,15 +82,18 @@ export const HeaderBar: React.FC<Props> = ({
             onPress={() => setAppMode('general')}
             activeOpacity={0.7}
           >
-            <Text
-              style={[
-                styles.modeButtonText,
-                appMode === 'general' && styles.modeButtonTextActive,
-              ]}
-              numberOfLines={1}
-            >
-              🍽️ Platillos Generales
-            </Text>
+            <View style={styles.modeButtonContent}>
+              <Utensils size={13} color={appMode === 'general' ? '#b3006c' : '#8e6e79'} />
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  appMode === 'general' && styles.modeButtonTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                Platillos Generales
+              </Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -101,15 +104,18 @@ export const HeaderBar: React.FC<Props> = ({
             onPress={() => setAppMode('detailed')}
             activeOpacity={0.7}
           >
-            <Text
-              style={[
-                styles.modeButtonText,
-                appMode === 'detailed' && styles.modeButtonTextActive,
-              ]}
-              numberOfLines={1}
-            >
-              📋 Menú Detallado
-            </Text>
+            <View style={styles.modeButtonContent}>
+              <Layers size={13} color={appMode === 'detailed' ? '#b3006c' : '#8e6e79'} />
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  appMode === 'detailed' && styles.modeButtonTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                Menú Detallado
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -215,6 +221,11 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  modeButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   modeButtonActive: {
     backgroundColor: '#ffffff',

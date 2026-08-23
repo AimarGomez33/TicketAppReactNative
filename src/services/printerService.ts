@@ -30,6 +30,8 @@ export interface PrintOptions {
   paymentMethod?: 'cash' | 'card' | 'transfer';
   amountPaid?: number;
   change?: number;
+  isReprint?: boolean;
+  orderId?: string;
 }
 
 export const generateEscPosBuffer = (
@@ -134,9 +136,23 @@ export const generateEscPosBuffer = (
     addText('¡Comanda lista para preparar!\n\n\n');
 
   } else {
-    // Ticket de Cobro / Cliente
+    // Ticket de Cobro / Cliente / Mostrador
+    if (options?.isReprint) {
+      addBytes(ESC_POS.TXT_BOLD_ON);
+      addText('*** REIMPRESION DE TICKET ***\n');
+      addBytes(ESC_POS.TXT_BOLD_OFF);
+    }
     addBytes(ESC_POS.TXT_BOLD_ON);
-    addText(`TICKET DE CONSUMO - MESA ${tableNumber || 'S/N'}\n`);
+    const isTakeout =
+      !tableNumber ||
+      tableNumber.toLowerCase() === 'llevar' ||
+      tableNumber.toLowerCase() === 'para llevar' ||
+      tableNumber.toLowerCase() === 'mostrador';
+
+    const titleHeader = isTakeout
+      ? 'PEDIDO: PARA LLEVAR'
+      : `CONSUMO: MESA ${tableNumber.toUpperCase()}`;
+    addText(`${titleHeader}\n`);
     addBytes(ESC_POS.TXT_BOLD_OFF);
     addText(`Fecha: ${new Date().toLocaleString()}\n`);
     addText('--------------------------------\n');
@@ -182,7 +198,97 @@ export const generateEscPosBuffer = (
   return new Uint8Array(bytes);
 };
 
-export const printTicketTCP = (
+// Encolado secuencial para que 2 tickets nunca compitan por el socket al mismo tiempo
+let printQueue = Promise.resolve(true);
+
+const executeSinglePrint = (
+  payload: Uint8Array,
+  host: string,
+  port: number,
+): Promise<boolean> => {
+  return new Promise((resolve, reject) => {
+    let isFinished = false;
+    let dataSent = false;
+    let client: any = null;
+
+    const cleanup = () => {
+      if (client) {
+        try {
+          client.destroy();
+        } catch {}
+      }
+    };
+
+    client = TcpSocket.createConnection({ host, port }, () => {
+      try {
+        client.write(Buffer.from(payload), (err?: any) => {
+          if (err && !dataSent) {
+            if (!isFinished) {
+              isFinished = true;
+              cleanup();
+              reject(err);
+            }
+            return;
+          }
+
+          dataSent = true;
+          // Espera de 200ms para vaciar buffers en la interfaz de red antes de destruir
+          setTimeout(() => {
+            if (!isFinished) {
+              isFinished = true;
+              cleanup();
+              resolve(true);
+            }
+          }, 200);
+        });
+      } catch (err) {
+        if (!isFinished) {
+          isFinished = true;
+          cleanup();
+          reject(err);
+        }
+      }
+    });
+
+    client.setTimeout(PRINTER_CONFIG.timeout);
+
+    client.on('timeout', () => {
+      if (!isFinished) {
+        isFinished = true;
+        cleanup();
+        if (dataSent) {
+          resolve(true);
+        } else {
+          reject(new Error(`Timeout: La impresora en ${host}:${port} no respondió`));
+        }
+      }
+    });
+
+    client.on('error', (error: any) => {
+      if (!isFinished) {
+        // Si los bytes ya se escribieron a la impresora, ignoramos errores de reset de cierre
+        if (dataSent) {
+          isFinished = true;
+          cleanup();
+          resolve(true);
+        } else {
+          isFinished = true;
+          cleanup();
+          reject(error);
+        }
+      }
+    });
+
+    client.on('close', () => {
+      if (!isFinished) {
+        isFinished = true;
+        resolve(true);
+      }
+    });
+  });
+};
+
+export const printTicketTCP = async (
   tableNumber: string,
   items: CartItem[],
   total: number,
@@ -190,30 +296,14 @@ export const printTicketTCP = (
   customHost?: string,
   customPort?: number,
 ): Promise<boolean> => {
-  return new Promise((resolve, reject) => {
-    const payload = generateEscPosBuffer(tableNumber, items, total, options);
-    const host = customHost || PRINTER_CONFIG.host;
-    const port = customPort || PRINTER_CONFIG.port;
+  const payload = generateEscPosBuffer(tableNumber, items, total, options);
+  const host = customHost || PRINTER_CONFIG.host;
+  const port = customPort || PRINTER_CONFIG.port;
 
-    const client = TcpSocket.createConnection(
-      { host, port },
-      () => {
-        client.write(Buffer.from(payload));
-        client.destroy();
-        resolve(true);
-      },
-    );
+  const task = async () => {
+    return executeSinglePrint(payload, host, port);
+  };
 
-    client.setTimeout(PRINTER_CONFIG.timeout);
-
-    client.on('timeout', () => {
-      client.destroy();
-      reject(new Error(`Timeout: Impresora ${host}:${port} no responde`));
-    });
-
-    client.on('error', error => {
-      client.destroy();
-      reject(error);
-    });
-  });
+  printQueue = printQueue.then(task).catch(task);
+  return printQueue;
 };

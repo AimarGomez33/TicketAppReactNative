@@ -18,15 +18,18 @@ import {
   CheckCircle2,
   Clock,
   BellRing,
+  Smartphone,
 } from 'lucide-react-native';
 import { printTicketTCP } from '../services/printerService';
 import { QuantityModal } from './QuantityModal';
+import { DigitalBillModal } from './DigitalBillModal';
 import { CartItem } from '../store/useCartStore';
 
 export const CartSheet: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [editingItem, setEditingItem] = useState<CartItem | null>(null);
+  const [showDigitalBill, setShowDigitalBill] = useState(false);
 
   const cart = useCartStore(state => state.cart);
   const tableNumber = useCartStore(state => state.tableNumber);
@@ -239,7 +242,7 @@ export const CartSheet: React.FC = () => {
                           </View>
                         </View>
                         <Text style={styles.itemUnitText}>
-                          ${product.price.toFixed(2)} c/u {notes ? `• 📝 ${notes}` : ''}
+                          ${product.price.toFixed(2)} c/u {notes ? `• Nota: ${notes}` : ''}
                         </Text>
                       </TouchableOpacity>
 
@@ -328,6 +331,16 @@ export const CartSheet: React.FC = () => {
                   </Text>
                 </TouchableOpacity>
 
+                {/* Botón Pre-Cuenta Digital en Móvil (Cero Desperdicio de Papel) */}
+                <TouchableOpacity
+                  style={styles.digitalBillBtn}
+                  onPress={() => setShowDigitalBill(true)}
+                  activeOpacity={0.8}
+                >
+                  <Smartphone size={16} color="#b3006c" style={styles.btnIconMargin} />
+                  <Text style={styles.digitalBillBtnText}>MOSTRAR CUENTA DIGITAL AL CLIENTE</Text>
+                </TouchableOpacity>
+
                 {/* Fila de Acciones Secundarias */}
                 <View style={styles.secondaryActionsRow}>
                   {/* Botón Vaciar */}
@@ -362,6 +375,16 @@ export const CartSheet: React.FC = () => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Modal de Pre-Cuenta Digital */}
+      <DigitalBillModal
+        visible={showDigitalBill}
+        tableNumber={tableNumber}
+        items={items}
+        total={total}
+        onClose={() => setShowDigitalBill(false)}
+        onRequestBill={handleRequestBill}
+      />
 
       {/* Modal de edición de cantidad */}
       {editingItem && (
@@ -674,6 +697,23 @@ const styles = StyleSheet.create({
   },
   kitchenSendBtnText: {
     color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  digitalBillBtn: {
+    backgroundColor: '#fff0f5',
+    borderColor: '#ffe0ea',
+    borderWidth: 1.5,
+    borderRadius: 20,
+    height: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  digitalBillBtnText: {
+    color: '#b3006c',
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.3,

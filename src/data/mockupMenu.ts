@@ -8,7 +8,7 @@ export interface Category {
 }
 
 export const CATEGORIES_DETAILED: Category[] = [
-  { id: 'top', name: '★ Populares', station: 'all' },
+  { id: 'top', name: 'Populares', station: 'all' },
   { id: 'antojitos', name: 'Antojitos', station: 'mexican' },
   { id: 'quesadillas', name: 'Quesadillas', station: 'mexican' },
   { id: 'tostadas', name: 'Tostadas', station: 'mexican' },
@@ -24,7 +24,7 @@ export const CATEGORIES_DETAILED: Category[] = [
 ];
 
 export const CATEGORIES_GENERAL: Category[] = [
-  { id: 'top', name: '★ Principales', station: 'all' },
+  { id: 'top', name: 'Principales', station: 'all' },
   { id: 'antojitos', name: 'Antojitos', station: 'mexican' },
   { id: 'quesadillas', name: 'Quesadillas', station: 'mexican' },
   { id: 'tostadas', name: 'Tostadas', station: 'mexican' },
@@ -98,7 +98,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   // --- 🇲🇽 COCINA 1: QUESADILLAS ($33 c/u) ---
   {
     id: 'gen-quesadilla',
-    name: 'Quesadilla (25 cm)',
+    name: 'Quesadilla',
     price: 33.0,
     category: 'quesadillas',
     kitchenStation: 'mexican',
@@ -108,7 +108,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   // --- 🇲🇽 COCINA 1: TOSTADAS ($37 c/u) ---
   {
     id: 'gen-tostada',
-    name: 'Tostada Preparada',
+    name: 'Tostada',
     price: 37.0,
     category: 'tostadas',
     kitchenStation: 'mexican',
@@ -154,7 +154,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   // --- 🇲🇽 COCINA 1: PAMBAZOS ---
   {
     id: 'gen-pambazo-nat',
-    name: 'Pambazo Natural (1 Guisado)',
+    name: 'Pambazo Natural',
     price: 38.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
@@ -162,7 +162,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   },
   {
     id: 'gen-pambazo-adob',
-    name: 'Pambazo Adobado (1 Guisado)',
+    name: 'Pambazo Adobado',
     price: 43.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
@@ -170,7 +170,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   },
   {
     id: 'gen-pambazo-nat-comb',
-    name: 'Pambazo Natural Combinado (2 Guisados)',
+    name: 'Pambazo Natural Combinado',
     price: 45.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
@@ -178,7 +178,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   },
   {
     id: 'gen-pambazo-adob-comb',
-    name: 'Pambazo Adobado Combinado (2 Guisados)',
+    name: 'Pambazo Adobado Combinado',
     price: 50.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
@@ -188,11 +188,11 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   // --- 🇲🇽 COCINA 1: GUAJOLOTA / VOLCÁN ---
   {
     id: 'gen-guajolota',
-    name: 'Guajolota / Volcán (25 cm)',
+    name: 'Guajolota / Volcán',
     price: 60.0,
     category: 'guajolotas',
     kitchenStation: 'mexican',
-    description: 'Huarache de maíz 25 cm, guisado, salsa, lechuga, queso rallado y Oaxaca',
+    description: 'Guisado, salsa, lechuga, queso rallado y queso Oaxaca',
   },
 
   // --- 🇺🇸 🌮 COCINA 2: HAMBURGUESAS ---
@@ -328,7 +328,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   // --- EXTRAS ---
   {
     id: 'ext-papas-combo',
-    name: 'Extra: Con Papas (150 gr)',
+    name: 'Extra: Con Papas',
     price: 30.0,
     category: 'extras',
     kitchenStation: 'american_tacos',

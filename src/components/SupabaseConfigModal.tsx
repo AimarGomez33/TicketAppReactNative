@@ -9,7 +9,7 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
-import { Database, X, Check, Globe, KeyRound } from 'lucide-react-native';
+import { Database, X, Check, Globe, KeyRound, Radio } from 'lucide-react-native';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 import { useCartStore } from '../store/useCartStore';
 
@@ -19,11 +19,12 @@ interface Props {
 }
 
 export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
-  const [url, setUrl] = useState(SUPABASE_CONFIG.url);
-  const [anonKey, setAnonKey] = useState(SUPABASE_CONFIG.anonKey);
-  const initRealtimeSync = useCartStore(state => state.initRealtimeSync);
   const isRealtimeConnected = useCartStore(state => state.isRealtimeConnected);
   const showCustomAlert = useCartStore(state => state.showCustomAlert);
+  const initRealtimeSync = useCartStore(state => state.initRealtimeSync);
+
+  const [url, setUrl] = useState(SUPABASE_CONFIG.url);
+  const [anonKey, setAnonKey] = useState(SUPABASE_CONFIG.anonKey);
 
   const handleSave = () => {
     SUPABASE_CONFIG.url = url.trim();
@@ -34,7 +35,7 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
     showCustomAlert({
       type: 'success',
       title: 'Configuración Guardada',
-      message: 'Las credenciales de Supabase se han actualizado y el cliente en tiempo real se ha reiniciado.',
+      message: 'Las credenciales de Supabase han sido actualizadas. Reconectando...',
       confirmText: 'Aceptar',
       onConfirm: onClose,
     });
@@ -63,8 +64,9 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
             <View style={styles.statusBox}>
               <Text style={styles.statusLabel}>Estado de Sincronización:</Text>
               <View style={[styles.statusBadge, isRealtimeConnected ? styles.statusBadgeConnected : styles.statusBadgeOffline]}>
+                {isRealtimeConnected && <Radio size={11} color="#059669" />}
                 <Text style={[styles.statusBadgeText, isRealtimeConnected ? styles.statusTextConnected : styles.statusTextOffline]}>
-                  {isRealtimeConnected ? '🟢 Conectado en Tiempo Real' : '⚪ Modo Local (Offline)'}
+                  {isRealtimeConnected ? 'Conectado en Tiempo Real' : 'Modo Local (Offline)'}
                 </Text>
               </View>
             </View>
@@ -97,7 +99,7 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
             </View>
 
             <Text style={styles.instructionsText}>
-              💡 Tip: Ejecuta el script `supabase_schema.sql` en el SQL Editor de tu proyecto en Supabase para crear las tablas automáticamente.
+              Tip: Ejecuta el script `supabase_schema.sql` en el SQL Editor de tu proyecto en Supabase para crear las tablas automáticamente.
             </Text>
           </ScrollView>
 
@@ -179,6 +181,9 @@ const styles = StyleSheet.create({
     color: '#5a3f49',
   },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
