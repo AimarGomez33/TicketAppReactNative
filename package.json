@@ -47,7 +47,6 @@
     "prettier": "2.8.8",
     "react-native-dotenv": "^4.1.1",
     "react-test-renderer": "19.2.3",
-    "supabase": "^2.115.0",
     "typescript": "^5.9.3"
   },
   "engines": {
