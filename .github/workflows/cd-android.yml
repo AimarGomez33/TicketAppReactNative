@@ -19,6 +19,8 @@ jobs:
   build-android-release:
     name: Build & Sign Android Release (APK & AAB)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: 📥 Checkout Repository
@@ -86,13 +88,14 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: 🚀 Create GitHub Release (On Version Tag)
+      - name: 🚀 Publish GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'TicketApp POS (Última Versión APK)' }}
           files: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/bundle/release/app-release.aab
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
           generate_release_notes: true
           draft: false
           prerelease: false
