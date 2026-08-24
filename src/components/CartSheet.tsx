@@ -19,6 +19,7 @@ import {
   Clock,
   BellRing,
   Smartphone,
+  Printer,
 } from 'lucide-react-native';
 import { printTicketTCP } from '../services/printerService';
 import { QuantityModal } from './QuantityModal';
@@ -122,6 +123,33 @@ export const CartSheet: React.FC = () => {
         setActiveTab('tables');
       },
     });
+  };
+
+  // Imprimir ticket de cuenta físico directamente para el cliente
+  const handlePrintCustomerBill = async () => {
+    if (itemCount === 0) return;
+    setIsPrinting(true);
+    try {
+      await printTicketTCP(tableNumber || 'S/N', items, total, {
+        showPrices: true,
+        isKitchenComanda: false,
+      });
+      showCustomAlert({
+        type: 'printer',
+        title: '¡Ticket de Cuenta Impreso!',
+        message: `Se imprimió el ticket de consumo con el total ($${total.toFixed(2)}) para entregar al cliente.`,
+        confirmText: 'Aceptar',
+      });
+    } catch (error: any) {
+      showCustomAlert({
+        type: 'error',
+        title: 'Aviso de Impresora',
+        message: `No se pudo imprimir el ticket (${error.message || '192.168.100.200'}).`,
+        confirmText: 'Aceptar',
+      });
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const handleGoToPayment = () => {
@@ -331,14 +359,15 @@ export const CartSheet: React.FC = () => {
                   </Text>
                 </TouchableOpacity>
 
-                {/* Botón Pre-Cuenta Digital en Móvil (Cero Desperdicio de Papel) */}
+                {/* Botón Imprimir Ticket de Cuenta para el Cliente */}
                 <TouchableOpacity
                   style={styles.digitalBillBtn}
-                  onPress={() => setShowDigitalBill(true)}
+                  onPress={handlePrintCustomerBill}
+                  disabled={isPrinting}
                   activeOpacity={0.8}
                 >
-                  <Smartphone size={16} color="#b3006c" style={styles.btnIconMargin} />
-                  <Text style={styles.digitalBillBtnText}>MOSTRAR CUENTA DIGITAL AL CLIENTE</Text>
+                  <Printer size={16} color="#b3006c" style={styles.btnIconMargin} />
+                  <Text style={styles.digitalBillBtnText}>IMPRIMIR TICKET DE CUENTA (${total.toFixed(2)})</Text>
                 </TouchableOpacity>
 
                 {/* Fila de Acciones Secundarias */}

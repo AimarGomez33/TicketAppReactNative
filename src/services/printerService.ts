@@ -213,9 +213,6 @@ export const generateEscPosBuffer = (
           ? 'TARJETA'
           : 'TRANSFERENCIA';
       addText(`Metodo de Pago: ${methodLabel}\n`);
-      if (options.amountPaid && options.amountPaid > 0) {
-        addText(`Pagado: $${options.amountPaid.toFixed(2)} | Cambio: $${(options.change || 0).toFixed(2)}\n`);
-      }
     }
 
     addText('--------------------------------\n');

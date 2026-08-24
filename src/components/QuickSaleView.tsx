@@ -92,9 +92,9 @@ export const QuickSaleView: React.FC = () => {
 
   // Filtrado reactivo de productos del menú
   const availableProducts = useMemo(() => {
-    const products = (menuProducts && menuProducts.length > 0)
-      ? menuProducts
-      : getProductsByMode(appMode);
+    const products = appMode === 'detailed'
+      ? getProductsByMode('detailed')
+      : (menuProducts && menuProducts.length > 0 ? menuProducts : getProductsByMode('general'));
     return products.filter((p: Product) => {
       if (searchQuery.trim().length > 0) {
         const q = searchQuery.toLowerCase().trim();
@@ -122,6 +122,18 @@ export const QuickSaleView: React.FC = () => {
         setModalVisible(false);
         return;
       }
+      if (customName && customName !== modalProduct.name) {
+        const variantSlug = customName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const variantProduct: Product = {
+          ...modalProduct,
+          id: `${modalProduct.id}-${variantSlug}`,
+          name: customName,
+          price: customPrice !== undefined ? customPrice : modalProduct.price,
+        };
+        setQuickSaleQuantity(variantProduct, qty, notes);
+        setModalVisible(false);
+        return;
+      }
       const effectiveProduct = (customPrice !== undefined || customName)
         ? { ...modalProduct, price: customPrice !== undefined ? customPrice : modalProduct.price, name: customName || modalProduct.name }
         : modalProduct;
@@ -136,31 +148,19 @@ export const QuickSaleView: React.FC = () => {
     setPayModalVisible(true);
   };
 
-  const handleProcessQuickPayment = async () => {
+  const handleProcessQuickPayment = async (method?: 'cash' | 'card' | 'transfer') => {
     if (cartItems.length === 0) return;
     const currentTable = selectedTable.trim() || 'Llevar';
-    const received = payMethod === 'cash' ? (parseFloat(payCashStr) || total) : total;
-    const change = Math.max(0, received - total);
-
-    if (payMethod === 'cash' && received < total) {
-      showCustomAlert({
-        title: 'Monto Insuficiente',
-        message: `El efectivo recibido ($${received.toFixed(2)}) es menor al total ($${total.toFixed(2)}).`,
-        type: 'info',
-      });
-      return;
-    }
+    const effectiveMethod = method || payMethod;
 
     setIsProcessing(true);
     try {
       await printTicketTCP(currentTable, cartItems, total, {
         showPrices: true,
-        paymentMethod: payMethod,
-        amountPaid: received,
-        change,
+        paymentMethod: effectiveMethod,
       });
 
-      await createQuickSaleOrder(currentTable, payMethod, received, change);
+      await createQuickSaleOrder(currentTable, effectiveMethod, total, 0);
 
       showCustomAlert({
         title: '¡Cobro de Mostrador Exitoso!',
@@ -169,7 +169,7 @@ export const QuickSaleView: React.FC = () => {
       });
       setPayModalVisible(false);
     } catch (err: any) {
-      await createQuickSaleOrder(currentTable, payMethod, received, change);
+      await createQuickSaleOrder(currentTable, effectiveMethod, total, 0);
       showCustomAlert({
         title: 'Cobro Registrado (Aviso Impresión)',
         message: `El cobro se registró en el sistema, pero la impresora no respondió (${err.message || '192.168.100.200'}).`,
@@ -823,10 +823,7 @@ export const QuickSaleView: React.FC = () => {
             <View style={styles.payMethodRow}>
               <TouchableOpacity
                 style={[styles.payMethodBtn, payMethod === 'cash' && styles.payMethodBtnActive]}
-                onPress={() => {
-                  setPayMethod('cash');
-                  setPayCashStr('');
-                }}
+                onPress={() => setPayMethod('cash')}
                 activeOpacity={0.8}
               >
                 <Banknote size={16} color={payMethod === 'cash' ? '#FFF' : '#5a3f49'} />
@@ -837,10 +834,7 @@ export const QuickSaleView: React.FC = () => {
 
               <TouchableOpacity
                 style={[styles.payMethodBtn, payMethod === 'card' && styles.payMethodBtnActive]}
-                onPress={() => {
-                  setPayMethod('card');
-                  setPayCashStr(total.toFixed(2));
-                }}
+                onPress={() => setPayMethod('card')}
                 activeOpacity={0.8}
               >
                 <CreditCard size={16} color={payMethod === 'card' ? '#FFF' : '#5a3f49'} />
@@ -851,10 +845,7 @@ export const QuickSaleView: React.FC = () => {
 
               <TouchableOpacity
                 style={[styles.payMethodBtn, payMethod === 'transfer' && styles.payMethodBtnActive]}
-                onPress={() => {
-                  setPayMethod('transfer');
-                  setPayCashStr(total.toFixed(2));
-                }}
+                onPress={() => setPayMethod('transfer')}
                 activeOpacity={0.8}
               >
                 <Zap size={16} color={payMethod === 'transfer' ? '#FFF' : '#5a3f49'} />
@@ -864,48 +855,10 @@ export const QuickSaleView: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* Sección de Efectivo y Cambio */}
-            {payMethod === 'cash' && (
-              <View style={styles.cashSection}>
-                <Text style={styles.cashSectionLabel}>DINERO RECIBIDO ($)</Text>
-                <TextInput
-                  style={styles.cashInput}
-                  placeholder={total.toFixed(2)}
-                  placeholderTextColor="#8e6e79"
-                  keyboardType="numeric"
-                  value={payCashStr}
-                  onChangeText={setPayCashStr}
-                />
-
-                {/* Chips de Efectivo Rápido */}
-                <View style={styles.cashPresetsRow}>
-                  {[50, 100, 200, 500].filter((amt) => amt >= total).concat([total]).map((amt) => (
-                    <TouchableOpacity
-                      key={`cash-${amt}`}
-                      style={[styles.cashPresetChip, payCashStr === amt.toString() && styles.cashPresetChipActive]}
-                      onPress={() => setPayCashStr(amt.toFixed(2))}
-                    >
-                      <Text style={[styles.cashPresetChipText, payCashStr === amt.toString() && styles.cashPresetChipTextActive]}>
-                        {amt === total ? 'Exacto' : `$${amt}`}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {/* Desglose de Cambio */}
-                <View style={styles.changeRow}>
-                  <Text style={styles.changeLabel}>CAMBIO A ENTREGAR:</Text>
-                  <Text style={styles.changeValue}>
-                    ${Math.max(0, (parseFloat(payCashStr) || total) - total).toFixed(2)}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* Botón Finalizar Cobro */}
+            {/* Botón Finalizar Cobro e Imprimir */}
             <TouchableOpacity
               style={styles.confirmPayBtn}
-              onPress={handleProcessQuickPayment}
+              onPress={() => handleProcessQuickPayment()}
               disabled={isProcessing}
               activeOpacity={0.85}
             >
@@ -913,9 +866,9 @@ export const QuickSaleView: React.FC = () => {
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
                 <>
-                  <Check size={18} color="#ffffff" />
+                  <Printer size={18} color="#ffffff" />
                   <Text style={styles.confirmPayBtnText}>
-                    FINALIZAR COBRO E IMPRIMIR
+                    FINALIZAR COBRO E IMPRIMIR (${total.toFixed(2)})
                   </Text>
                 </>
               )}

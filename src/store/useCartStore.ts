@@ -35,6 +35,7 @@ export interface Product {
   description?: string;
   kitchenStation?: KitchenStation;
   isCustomPrice?: boolean;
+  variants?: { id: string; name: string; price?: number }[];
 }
 
 export type ItemKitchenStatus = 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready';

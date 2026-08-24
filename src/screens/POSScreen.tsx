@@ -22,9 +22,9 @@ export const POSScreen: React.FC = () => {
 
   // Filtrado reactivo instantáneo por categoría, modo de app y live search
   const filteredProducts = useMemo(() => {
-    const products = (menuProducts && menuProducts.length > 0)
-      ? menuProducts
-      : getProductsByMode(appMode);
+    const products = appMode === 'detailed'
+      ? getProductsByMode('detailed')
+      : (menuProducts && menuProducts.length > 0 ? menuProducts : getProductsByMode('general'));
 
     return products.filter((product: Product) => {
       // Si hay texto de búsqueda, busca en nombre y descripción

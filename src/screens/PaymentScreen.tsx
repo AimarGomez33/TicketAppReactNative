@@ -212,59 +212,17 @@ export function PaymentScreen() {
     );
   }
 
-  const receivedCash = parseFloat(receivedCashStr) || 0;
-  const change = Math.max(0, receivedCash - total);
-  const isAmountSufficient = receivedCash >= total;
-
-  const handleKeyPress = (val: string) => {
-    if (paymentMethod !== 'cash') return;
-
-    if (val === 'C') {
-      setReceivedCashStr('');
-    } else if (val === '.') {
-      if (!receivedCashStr.includes('.')) {
-        setReceivedCashStr(prev => (prev === '' ? '0.' : prev + '.'));
-      }
-    } else {
-      const parts = receivedCashStr.split('.');
-      if (parts[1] && parts[1].length >= 2) return;
-      setReceivedCashStr(prev => prev + val);
-    }
-  };
-
-  const handleQuickCash = (amount: number) => {
-    if (paymentMethod !== 'cash') return;
-    setReceivedCashStr(amount.toString());
-  };
-
-  const handleExactCash = () => {
-    if (paymentMethod !== 'cash') return;
-    setReceivedCashStr(total.toFixed(2));
-  };
-
   const handleProcessPayment = async () => {
-    if (paymentMethod === 'cash' && !isAmountSufficient) {
-      showCustomAlert({
-        type: 'error',
-        title: 'Monto Insuficiente',
-        message: `El dinero recibido ($${receivedCash.toFixed(2)}) es menor que el total a cobrar ($${total.toFixed(2)}).`,
-        confirmText: 'Entendido',
-      });
-      return;
-    }
-
     setIsProcessing(true);
     try {
-      // Imprimir ticket con desglose de precios unitarios y método de pago
+      // Imprimir ticket con desglose y total
       await printTicketTCP(tableNumber, items, total, {
         showPrices: true,
         isKitchenComanda: false,
         paymentMethod,
-        amountPaid: receivedCash,
-        change,
       });
 
-      await completePayment(paymentMethod, receivedCash, change);
+      await completePayment(paymentMethod, total, 0);
 
       showCustomAlert({
         type: 'printer',
@@ -283,7 +241,7 @@ export function PaymentScreen() {
         confirmText: 'Cerrar sin Imprimir',
         cancelText: 'Cancelar',
         onConfirm: async () => {
-          await completePayment(paymentMethod, receivedCash, change);
+          await completePayment(paymentMethod, total, 0);
           setActiveTab('tables');
         },
       });
@@ -427,129 +385,18 @@ export function PaymentScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Detalle del Cobro */}
-        {paymentMethod === 'cash' ? (
-          <View style={styles.cashSection}>
-            <View style={styles.cashSummaryRow}>
-              <View style={styles.cashSumBox}>
-                <Text style={styles.cashSumLabel}>Efectivo Recibido</Text>
-                <Text style={styles.cashSumValue}>
-                  ${receivedCash > 0 ? receivedCash.toFixed(2) : '0.00'}
-                </Text>
-              </View>
-              <View style={styles.cashSumBox}>
-                <Text style={styles.cashSumLabel}>Cambio a Regresar</Text>
-                <Text
-                  style={[
-                    styles.cashSumValue,
-                    isAmountSufficient ? styles.cashSumValueSufficient : styles.cashSumValueInsufficient,
-                  ]}
-                >
-                  ${change.toFixed(2)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Atajos de Efectivo */}
-            <View style={styles.quickCashContainer}>
-              {[50, 100, 200, 500].map(amt => (
-                <TouchableOpacity
-                  key={amt}
-                  style={styles.quickCashBtn}
-                  onPress={() => handleQuickCash(amt)}
-                >
-                  <Text style={styles.quickCashText}>${amt}</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={[styles.quickCashBtn, styles.exactCashBtn]}
-                onPress={handleExactCash}
-              >
-                <Text style={styles.exactCashText}>Exacto</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Teclado Numérico */}
-            <View style={styles.keypad}>
-              <View style={styles.keypadRow}>
-                {['1', '2', '3'].map(k => (
-                  <TouchableOpacity
-                    key={k}
-                    style={styles.keyBtn}
-                    onPress={() => handleKeyPress(k)}
-                  >
-                    <Text style={styles.keyText}>{k}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={styles.keypadRow}>
-                {['4', '5', '6'].map(k => (
-                  <TouchableOpacity
-                    key={k}
-                    style={styles.keyBtn}
-                    onPress={() => handleKeyPress(k)}
-                  >
-                    <Text style={styles.keyText}>{k}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={styles.keypadRow}>
-                {['7', '8', '9'].map(k => (
-                  <TouchableOpacity
-                    key={k}
-                    style={styles.keyBtn}
-                    onPress={() => handleKeyPress(k)}
-                  >
-                    <Text style={styles.keyText}>{k}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={styles.keypadRow}>
-                <TouchableOpacity
-                  style={styles.keyBtn}
-                  onPress={() => handleKeyPress('.')}
-                >
-                  <Text style={styles.keyText}>.</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.keyBtn}
-                  onPress={() => handleKeyPress('0')}
-                >
-                  <Text style={styles.keyText}>0</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.keyBtn, styles.clearKeyBtn]}
-                  onPress={() => handleKeyPress('C')}
-                >
-                  <Text style={styles.clearKeyText}>C</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.cardInfoContainer}>
-            <Text style={styles.cardInfoText}>
-              Cobro mediante {paymentMethod === 'card' ? 'Terminal de Tarjeta' : 'Transferencia Electrónica'}.
-            </Text>
-            <Text style={styles.cardInfoSubText}>
-              Confirma que la transacción de ${total.toFixed(2)} fue exitosa antes de cerrar la comanda.
-            </Text>
-          </View>
-        )}
-
-        {/* Botón de Procesar Pago */}
+        {/* Botón Directo de Cobro e Impresión */}
         <TouchableOpacity
           style={[
             styles.processBtn,
-            (!isAmountSufficient && paymentMethod === 'cash') && styles.processBtnDisabled,
             isProcessing && styles.processBtnDisabled,
           ]}
           onPress={handleProcessPayment}
-          disabled={(!isAmountSufficient && paymentMethod === 'cash') || isProcessing}
+          disabled={isProcessing}
         >
           <Printer size={18} color="#FFF" style={styles.processBtnIcon} />
           <Text style={styles.processBtnText}>
-            {isProcessing ? 'CERRANDO Y ENVIANDO TICKET...' : 'COBRAR E IMPRIMIR TICKET'}
+            {isProcessing ? 'CERRANDO E IMPRIMIENDO TICKET...' : `COBRAR E IMPRIMIR ($${total.toFixed(2)})`}
           </Text>
         </TouchableOpacity>
       </ScrollView>

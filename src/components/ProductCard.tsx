@@ -30,6 +30,19 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
       return;
     }
 
+    if (customName && customName !== product.name) {
+      const variantSlug = customName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const variantProduct: Product = {
+        ...product,
+        id: `${product.id}-${variantSlug}`,
+        name: customName,
+        price: customPrice !== undefined ? customPrice : product.price,
+      };
+      setQuantity(variantProduct, newQty, newNotes);
+      setModalVisible(false);
+      return;
+    }
+
     const effectiveProduct = (customPrice !== undefined || customName)
       ? { ...product, price: customPrice !== undefined ? customPrice : product.price, name: customName || product.name }
       : product;

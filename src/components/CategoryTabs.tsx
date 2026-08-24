@@ -21,7 +21,9 @@ export const CategoryTabs: React.FC<Props> = ({
 }) => {
   const appMode = useCartStore(state => state.appMode);
   const menuCategories = useCartStore(state => state.menuCategories);
-  const categories = menuCategories && menuCategories.length > 0 ? menuCategories : getCategoriesByMode(appMode);
+  const categories = appMode === 'detailed'
+    ? getCategoriesByMode('detailed')
+    : (menuCategories && menuCategories.length > 0 ? menuCategories : getCategoriesByMode('general'));
 
   return (
     <View style={styles.wrapper}>

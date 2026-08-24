@@ -15,11 +15,16 @@ on:
 jobs:
   build-ios-release:
     name: Build & Archive iOS Release (IPA)
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
+
+      - name: 🍏 Select Xcode 16.2
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          xcodebuild -version
 
       - name: ⚡ Setup pnpm
         uses: pnpm/action-setup@v4

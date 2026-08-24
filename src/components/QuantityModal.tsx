@@ -35,6 +35,9 @@ export const QuantityModal: React.FC<Props> = ({
   const [notes, setNotes] = useState<string>('');
   const [customPriceStr, setCustomPriceStr] = useState<string>('');
   const [customName, setCustomName] = useState<string>('');
+  const [customVariants, setCustomVariants] = useState<{ id: string; name: string }[]>([]);
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const [newVariantInput, setNewVariantInput] = useState<string>('');
 
   useEffect(() => {
     if (visible && product) {
@@ -42,6 +45,14 @@ export const QuantityModal: React.FC<Props> = ({
       setNotes(currentNotes || '');
       setCustomPriceStr(product.price > 0 ? product.price.toString() : '');
       setCustomName(product.name || 'Extra Personalizado');
+      const baseVariants = product.variants ? [...product.variants] : [];
+      setCustomVariants(baseVariants);
+      setNewVariantInput('');
+      if (baseVariants.length > 0) {
+        setSelectedVariant(baseVariants[0].name);
+      } else {
+        setSelectedVariant(null);
+      }
     }
   }, [visible, currentQuantity, currentNotes, product]);
 
@@ -53,6 +64,10 @@ export const QuantityModal: React.FC<Props> = ({
     ? isNaN(parsedCustomPrice) ? 0 : parsedCustomPrice
     : product.price;
 
+  const displayName = selectedVariant
+    ? `${product.name} (${selectedVariant})`
+    : (isCustomPriceMode ? (customName || 'Extra Personalizado') : product.name);
+
   const handleQuickAdd = (amount: number) => {
     setQuantity(prev => prev + amount);
   };
@@ -61,12 +76,25 @@ export const QuantityModal: React.FC<Props> = ({
     setQuantity(amount);
   };
 
+  const handleAddCustomVariant = () => {
+    const clean = newVariantInput.trim();
+    if (clean.length === 0) return;
+    const newVar = { id: `custom-var-${Date.now()}`, name: clean };
+    setCustomVariants(prev => [...prev, newVar]);
+    setSelectedVariant(clean);
+    setNewVariantInput('');
+  };
+
   const handleConfirm = () => {
+    const finalVariantName = selectedVariant
+      ? `${product.name} ${selectedVariant}`
+      : undefined;
+
     onConfirm(
-      Math.max(0, quantity),
+      Math.max(1, quantity),
       notes.trim(),
       isCustomPriceMode ? effectivePrice : undefined,
-      isCustomPriceMode ? customName.trim() : undefined
+      finalVariantName || (isCustomPriceMode ? customName.trim() : undefined)
     );
     onClose();
   };
@@ -84,7 +112,7 @@ export const QuantityModal: React.FC<Props> = ({
           <View style={styles.header}>
             <View style={styles.headerTextContainer}>
               <Text style={styles.productName} numberOfLines={1}>
-                {isCustomPriceMode ? (customName || 'Extra Personalizado') : product.name}
+                {displayName}
               </Text>
               <Text style={styles.productPrice}>
                 ${effectivePrice.toFixed(2)} c/u • Subtotal: ${(effectivePrice * quantity).toFixed(2)}
@@ -96,6 +124,58 @@ export const QuantityModal: React.FC<Props> = ({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Selector de Guisado / Variante / Sabor */}
+            {(customVariants.length > 0 || product.category === 'bebidas' || product.category === 'quesadillas') && (
+              <View style={styles.variantsSection}>
+                <Text style={styles.sectionLabel}>ELIGE EL SABOR, GUISADO O VARIANTE</Text>
+                <View style={styles.variantsGrid}>
+                  {customVariants.map((v) => {
+                    const isSelected = selectedVariant === v.name;
+                    return (
+                      <TouchableOpacity
+                        key={v.id}
+                        style={[
+                          styles.variantChip,
+                          isSelected && styles.variantChipActive,
+                        ]}
+                        onPress={() => setSelectedVariant(v.name)}
+                        activeOpacity={0.7}
+                      >
+                        {isSelected && <Check size={13} color="#ffffff" style={styles.variantCheckIcon} />}
+                        <Text
+                          style={[
+                            styles.variantChipText,
+                            isSelected && styles.variantChipTextActive,
+                          ]}
+                        >
+                          {v.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Input para Agregar Sabor o Variante Personalizada al Vuelo */}
+                <View style={styles.addVariantRow}>
+                  <TextInput
+                    style={styles.addVariantInput}
+                    placeholder="Otro sabor/opción (ej. Sprite Zero, Maracuyá)..."
+                    placeholderTextColor="#8e6e79"
+                    value={newVariantInput}
+                    onChangeText={setNewVariantInput}
+                    onSubmitEditing={handleAddCustomVariant}
+                  />
+                  <TouchableOpacity
+                    style={styles.addVariantBtn}
+                    onPress={handleAddCustomVariant}
+                    activeOpacity={0.8}
+                  >
+                    <Plus size={14} color="#FFF" />
+                    <Text style={styles.addVariantBtnText}>+ Añadir</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
             {/* Input Especial de Precio Personalizado */}
             {isCustomPriceMode && (
               <View style={styles.customPriceSection}>
@@ -447,6 +527,71 @@ const styles = StyleSheet.create({
   confirmBtnText: {
     color: '#ffffff',
     fontSize: 14,
+    fontWeight: 'bold',
+  },
+  variantsSection: {
+    marginBottom: 16,
+  },
+  variantsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  variantChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff0f3',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  variantChipActive: {
+    backgroundColor: '#b3006c',
+    borderColor: '#b3006c',
+  },
+  variantCheckIcon: {
+    marginRight: 4,
+  },
+  variantChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5a3f49',
+  },
+  variantChipTextActive: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  addVariantRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
+  addVariantInput: {
+    flex: 1,
+    backgroundColor: '#fff8f8',
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 12,
+    color: '#27171d',
+  },
+  addVariantBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#b3006c',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  addVariantBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
     fontWeight: 'bold',
   },
 });
