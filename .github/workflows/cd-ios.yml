@@ -26,6 +26,13 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
           xcodebuild -version
 
+      - name: 📲 Ensure iOS platform is installed
+        run: |
+          if ! xcodebuild -showsdks | grep -q "iphoneos18.2"; then
+            sudo xcodebuild -downloadPlatform iOS
+          fi
+          xcodebuild -showsdks
+
       - name: ⚡ Setup pnpm
         uses: pnpm/action-setup@v4
 
