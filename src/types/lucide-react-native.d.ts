@@ -30,6 +30,8 @@ declare module 'lucide-react-native' {
   export const Search: Icon;
   export const ChevronLeft: Icon;
   export const ChevronRight: Icon;
+  export const ChevronUp: Icon;
+  export const ChevronDown: Icon;
   export const XCircle: Icon;
   export const Tag: Icon;
   export const CreditCard: Icon;
@@ -45,6 +47,7 @@ declare module 'lucide-react-native' {
   export const RefreshCw: Icon;
   export const AlertCircle: Icon;
   export const CheckCircle: Icon;
+  export const CheckCircle2: Icon;
   export const Info: Icon;
   export const Flame: Icon;
   export const Beef: Icon;
@@ -54,4 +57,12 @@ declare module 'lucide-react-native' {
   export const Menu: Icon;
   export const Database: Icon;
   export const Wifi: Icon;
+  export const Globe: Icon;
+  export const KeyRound: Icon;
+  export const Receipt: Icon;
+  export const Lock: Icon;
+  export const User: Icon;
+  export const Settings: Icon;
+  export const AlertTriangle: Icon;
+  export const HelpCircle: Icon;
 }
