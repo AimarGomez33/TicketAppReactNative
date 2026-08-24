@@ -15,12 +15,21 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
   const addItem = useCartStore(state => state.addItem);
   const setQuantity = useCartStore(state => state.setQuantity);
   const removeItem = useCartStore(state => state.removeItem);
+  const addCustomExtraItem = useCartStore(state => state.addCustomExtraItem);
   const cartItem = useCartStore(state => state.cart[product.id]);
 
   const quantity = cartItem ? cartItem.quantity : 0;
   const notes = cartItem?.notes;
 
   const handleModalConfirm = (newQty: number, newNotes: string, customPrice?: number, customName?: string) => {
+    if (product.isCustomPrice) {
+      const finalPrice = customPrice !== undefined ? customPrice : product.price;
+      const finalName = customName || product.name;
+      addCustomExtraItem(finalPrice, finalName, newNotes, false);
+      setModalVisible(false);
+      return;
+    }
+
     const effectiveProduct = (customPrice !== undefined || customName)
       ? { ...product, price: customPrice !== undefined ? customPrice : product.price, name: customName || product.name }
       : product;

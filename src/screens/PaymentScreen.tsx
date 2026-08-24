@@ -26,6 +26,8 @@ type CashierViewMode = 'table' | 'quick';
 
 export function PaymentScreen() {
   const tableNumber = useCartStore(state => state.tableNumber);
+  const setTableNumber = useCartStore(state => state.setTableNumber);
+  const tables = useCartStore(state => state.tables);
   const cart = useCartStore(state => state.cart);
 
   // Zustand actions
@@ -36,8 +38,8 @@ export function PaymentScreen() {
   const setIncludePricesInTicket = useCartStore(state => state.setIncludePricesInTicket);
   const showCustomAlert = useCartStore(state => state.showCustomAlert);
 
-  // Local state
-  const [cashierMode, setCashierMode] = useState<CashierViewMode>(tableNumber ? 'table' : 'quick');
+  // Local state - Nunca forzar modo automáticamente para no atrapar al cajero
+  const [cashierMode, setCashierMode] = useState<CashierViewMode>('quick');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [receivedCashStr, setReceivedCashStr] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -45,11 +47,24 @@ export function PaymentScreen() {
   const total = getTotal();
   const items = Object.values(cart);
 
-  useEffect(() => {
-    if (tableNumber && items.length > 0) {
-      setCashierMode('table');
-    }
-  }, [tableNumber, items.length]);
+  // Lista de mesas con comanda activa o cuenta solicitada
+  const activeTablesList = Object.keys(tables)
+    .filter((tbl) => {
+      const tOrder = tables[tbl];
+      const hasCartItems = tOrder && tOrder.cart && Object.keys(tOrder.cart).length > 0;
+      return hasCartItems || tOrder?.status === 'bill_requested' || tOrder?.status === 'busy';
+    })
+    .map((tbl) => {
+      const tOrder = tables[tbl];
+      const tItems = tOrder?.cart ? Object.values(tOrder.cart) : [];
+      const tTotal = tItems.reduce((acc, it) => acc + it.product.price * it.quantity, 0);
+      return {
+        tableNumber: tbl,
+        status: tOrder?.status || 'free',
+        itemCount: tItems.reduce((acc, it) => acc + it.quantity, 0),
+        total: tTotal,
+      };
+    });
 
   useEffect(() => {
     if (paymentMethod !== 'cash') {
@@ -59,7 +74,7 @@ export function PaymentScreen() {
     }
   }, [paymentMethod, total]);
 
-  // Si está en modo Venta Rápida / Comanda Manual
+  // Si está en modo Venta Rápida / Mostrador
   if (cashierMode === 'quick') {
     return (
       <View style={styles.outerContainer}>
@@ -72,7 +87,7 @@ export function PaymentScreen() {
           >
             <UtensilsCrossed size={14} color="#5a3f49" />
             <Text style={styles.segmentBtnText}>
-              {tableNumber ? `Mesa ${tableNumber.toUpperCase()}` : 'Cobro de Mesas'}
+              Cobro de Mesas {activeTablesList.length > 0 ? `(${activeTablesList.length})` : ''}
             </Text>
           </TouchableOpacity>
 
@@ -93,6 +108,7 @@ export function PaymentScreen() {
     );
   }
 
+  // Si no hay mesa activa con productos seleccionada pero hay mesas activas disponibles
   if (!tableNumber || items.length === 0) {
     return (
       <View style={styles.outerContainer}>
@@ -105,7 +121,7 @@ export function PaymentScreen() {
           >
             <UtensilsCrossed size={14} color="#FFF" />
             <Text style={[styles.segmentBtnText, styles.segmentBtnTextActive]}>
-              Cobro de Mesas
+              Cobro de Mesas {activeTablesList.length > 0 ? `(${activeTablesList.length})` : ''}
             </Text>
           </TouchableOpacity>
 
@@ -121,12 +137,57 @@ export function PaymentScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.emptyContainer}>
-          <XCircle size={48} color="#b3006c" />
-          <Text style={styles.emptyTitle}>Sin Mesa Seleccionada</Text>
-          <Text style={styles.emptyText}>
-            No hay una cuenta activa de mesa para cobrar. Puedes ir a la vista de mesas o abrir una comanda manual directa en Venta Rápida.
-          </Text>
+        <ScrollView contentContainerStyle={styles.emptyScrollContent}>
+          <Text style={styles.sectionHeaderTitle}>MESAS CON CONSUMO PENDIENTE DE COBRO</Text>
+          
+          {activeTablesList.length > 0 ? (
+            <View style={styles.activeTablesGrid}>
+              {activeTablesList.map((t) => {
+                const isBillReq = t.status === 'bill_requested';
+                return (
+                  <TouchableOpacity
+                    key={t.tableNumber}
+                    style={[
+                      styles.tableCardSelectable,
+                      isBillReq && styles.tableCardBillRequested,
+                    ]}
+                    onPress={() => {
+                      setTableNumber(t.tableNumber);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.tableCardHeader}>
+                      <Text style={styles.tableCardNumber}>MESA {t.tableNumber.toUpperCase()}</Text>
+                      {isBillReq ? (
+                        <View style={styles.billReqBadge}>
+                          <Text style={styles.billReqBadgeText}>PIDIÓ CUENTA</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.busyBadge}>
+                          <Text style={styles.busyBadgeText}>OCUPADA</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <Text style={styles.tableCardTotal}>${t.total.toFixed(2)}</Text>
+                    <Text style={styles.tableCardSubtext}>{t.itemCount} platillos en comanda</Text>
+
+                    <View style={styles.chargeActionBtn}>
+                      <Text style={styles.chargeActionBtnText}>COBRAR ESTA MESA →</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <XCircle size={48} color="#b3006c" />
+              <Text style={styles.emptyTitle}>No hay mesas pendientes de cobro</Text>
+              <Text style={styles.emptyText}>
+                Todas las mesas están libres o ya fueron cobradas. Puedes atender pedidos directos en Mostrador.
+              </Text>
+            </View>
+          )}
 
           <View style={styles.emptyButtonsRow}>
             <TouchableOpacity
@@ -135,7 +196,7 @@ export function PaymentScreen() {
               activeOpacity={0.8}
             >
               <Zap size={16} color="#FFF" />
-              <Text style={styles.quickSaleSwitchBtnText}>VENTA RÁPIDA / MOSTRADOR</Text>
+              <Text style={styles.quickSaleSwitchBtnText}>IR A VENTA RÁPIDA / MOSTRADOR</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -143,10 +204,10 @@ export function PaymentScreen() {
               onPress={() => setActiveTab('tables')}
               activeOpacity={0.8}
             >
-              <Text style={styles.backButtonText}>IR A MESAS</Text>
+              <Text style={styles.backButtonText}>MAPA DE MESAS</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </ScrollView>
       </View>
     );
   }
@@ -902,6 +963,95 @@ const styles = StyleSheet.create({
     color: '#5a3f49',
   },
   ticketConfigToggleTextActive: {
+    color: '#ffffff',
+  },
+  emptyScrollContent: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  sectionHeaderTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#5a3f49',
+    letterSpacing: 0.8,
+    marginBottom: 12,
+  },
+  activeTablesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+  },
+  tableCardSelectable: {
+    width: '48%',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#ffd9e5',
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  tableCardBillRequested: {
+    borderColor: '#b3006c',
+    backgroundColor: '#fff5f8',
+  },
+  tableCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tableCardNumber: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#27171d',
+  },
+  billReqBadge: {
+    backgroundColor: '#b3006c',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  billReqBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  busyBadge: {
+    backgroundColor: '#ffd9e5',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  busyBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#b3006c',
+  },
+  tableCardTotal: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#b3006c',
+    marginBottom: 2,
+  },
+  tableCardSubtext: {
+    fontSize: 11,
+    color: '#8e6e79',
+    marginBottom: 10,
+  },
+  chargeActionBtn: {
+    backgroundColor: '#b3006c',
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  chargeActionBtnText: {
+    fontSize: 11,
+    fontWeight: 'bold',
     color: '#ffffff',
   },
 });

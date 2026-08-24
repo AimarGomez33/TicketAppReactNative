@@ -1,4 +1,3 @@
-// src/components/QuickSaleView.tsx
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -8,6 +7,7 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import {
   useCartStore,
@@ -19,6 +19,7 @@ import {
 } from '../data/mockupMenu';
 import { printTicketTCP } from '../services/printerService';
 import { QuantityModal } from './QuantityModal';
+import { CustomExtraModal } from './CustomExtraModal';
 import {
   Search,
   Plus,
@@ -34,6 +35,10 @@ import {
   X,
   ShoppingBag,
   Hash,
+  CircleDollarSign,
+  CreditCard,
+  Banknote,
+  Check,
 } from 'lucide-react-native';
 
 type SubViewTab = 'editor' | 'history';
@@ -50,6 +55,10 @@ export const QuickSaleView: React.FC = () => {
   // Estado para el modal de cantidad y notas detalladas (+10, exactas, etc.)
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [extraModalVisible, setExtraModalVisible] = useState<boolean>(false);
+  const [payModalVisible, setPayModalVisible] = useState<boolean>(false);
+  const [payMethod, setPayMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [payCashStr, setPayCashStr] = useState<string>('');
 
   const appMode = useCartStore((state) => state.appMode);
   const menuProducts = useCartStore((state) => state.menuProducts);
@@ -64,6 +73,7 @@ export const QuickSaleView: React.FC = () => {
   const clearQuickSale = useCartStore((state) => state.clearQuickSale);
   const getQuickSaleTotal = useCartStore((state) => state.getQuickSaleTotal);
   const createQuickSaleOrder = useCartStore((state) => state.createQuickSaleOrder);
+  const addCustomExtraItem = useCartStore((state) => state.addCustomExtraItem);
   const loadQuickSaleOrderForEdit = useCartStore((state) => state.loadQuickSaleOrderForEdit);
   const cancelEditQuickSaleOrder = useCartStore((state) => state.cancelEditQuickSaleOrder);
   const updateAndSaveQuickSaleOrder = useCartStore((state) => state.updateAndSaveQuickSaleOrder);
@@ -105,12 +115,70 @@ export const QuickSaleView: React.FC = () => {
 
   const handleModalConfirm = (qty: number, notes: string, customPrice?: number, customName?: string) => {
     if (modalProduct) {
+      if (modalProduct.isCustomPrice) {
+        const finalPrice = customPrice !== undefined ? customPrice : modalProduct.price;
+        const finalName = customName || modalProduct.name;
+        addCustomExtraItem(finalPrice, finalName, notes, true);
+        setModalVisible(false);
+        return;
+      }
       const effectiveProduct = (customPrice !== undefined || customName)
         ? { ...modalProduct, price: customPrice !== undefined ? customPrice : modalProduct.price, name: customName || modalProduct.name }
         : modalProduct;
       setQuickSaleQuantity(effectiveProduct, qty, notes);
     }
     setModalVisible(false);
+  };
+
+  const openPayModal = () => {
+    setPayMethod('cash');
+    setPayCashStr('');
+    setPayModalVisible(true);
+  };
+
+  const handleProcessQuickPayment = async () => {
+    if (cartItems.length === 0) return;
+    const currentTable = selectedTable.trim() || 'Llevar';
+    const received = payMethod === 'cash' ? (parseFloat(payCashStr) || total) : total;
+    const change = Math.max(0, received - total);
+
+    if (payMethod === 'cash' && received < total) {
+      showCustomAlert({
+        title: 'Monto Insuficiente',
+        message: `El efectivo recibido ($${received.toFixed(2)}) es menor al total ($${total.toFixed(2)}).`,
+        type: 'info',
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await printTicketTCP(currentTable, cartItems, total, {
+        showPrices: true,
+        paymentMethod: payMethod,
+        amountPaid: received,
+        change,
+      });
+
+      await createQuickSaleOrder(currentTable, payMethod, received, change);
+
+      showCustomAlert({
+        title: '¡Cobro de Mostrador Exitoso!',
+        message: `Pedido de ${currentTable.toUpperCase()} cobrado por $${total.toFixed(2)}. Ticket impreso.`,
+        type: 'success',
+      });
+      setPayModalVisible(false);
+    } catch (err: any) {
+      await createQuickSaleOrder(currentTable, payMethod, received, change);
+      showCustomAlert({
+        title: 'Cobro Registrado (Aviso Impresión)',
+        message: `El cobro se registró en el sistema, pero la impresora no respondió (${err.message || '192.168.100.200'}).`,
+        type: 'printer',
+      });
+      setPayModalVisible(false);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Procesar impresión y guardado de comanda manual (Nueva o Editada)
@@ -310,7 +378,7 @@ export const QuickSaleView: React.FC = () => {
             </View>
           </View>
 
-          {/* Barra de Búsqueda y Limpieza de Menú */}
+          {/* Barra de Búsqueda, Botón Extra y Limpieza de Menú */}
           <View style={styles.searchRow}>
             <View style={styles.searchContainer}>
               <Search size={16} color="#8e6e79" />
@@ -327,6 +395,15 @@ export const QuickSaleView: React.FC = () => {
                 </TouchableOpacity>
               )}
             </View>
+
+            <TouchableOpacity
+              style={styles.extraButton}
+              onPress={() => setExtraModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <CircleDollarSign size={15} color="#FFF" />
+              <Text style={styles.extraButtonText}>+ Extra $</Text>
+            </TouchableOpacity>
 
             {cartItems.length > 0 && !editingQuickSaleOrderId && (
               <TouchableOpacity
@@ -551,36 +628,41 @@ export const QuickSaleView: React.FC = () => {
               </View>
             )}
 
-            {/* Botón Principal de Acción (Imprimir Cuenta / Actualizar) */}
+            {/* Botones de Acción de Comanda (Pre-cuenta y Cobro Directo) */}
             {cartItems.length > 0 && (
-              <TouchableOpacity
-                style={styles.mainActionBtn}
-                onPress={handlePrintAndSaveOrder}
-                disabled={isProcessing}
-                activeOpacity={0.85}
-              >
-                {isProcessing ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <>
-                    {editingQuickSaleOrderId ? (
-                      <>
-                        <RotateCcw size={18} color="#ffffff" />
-                        <Text style={styles.mainActionBtnText}>
-                          ACTUALIZAR E IMPRIMIR ({selectedTable.toUpperCase()}) - ${total.toFixed(2)}
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Printer size={18} color="#ffffff" />
-                        <Text style={styles.mainActionBtnText}>
-                          IMPRIMIR TICKET ({selectedTable.toUpperCase()}) - ${total.toFixed(2)}
-                        </Text>
-                      </>
-                    )}
-                  </>
-                )}
-              </TouchableOpacity>
+              <View style={styles.cartActionButtonsRow}>
+                {/* Botón 1: Imprimir Pre-cuenta / Actualizar */}
+                <TouchableOpacity
+                  style={styles.preTicketBtn}
+                  onPress={handlePrintAndSaveOrder}
+                  disabled={isProcessing}
+                  activeOpacity={0.8}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator size="small" color="#5a3f49" />
+                  ) : (
+                    <>
+                      <Printer size={16} color="#5a3f49" />
+                      <Text style={styles.preTicketBtnText}>
+                        {editingQuickSaleOrderId ? 'ACTUALIZAR' : 'PRE-CUENTA'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* Botón 2: Cobrar Inmediatamente en Caja */}
+                <TouchableOpacity
+                  style={styles.directPayBtn}
+                  onPress={openPayModal}
+                  disabled={isProcessing}
+                  activeOpacity={0.85}
+                >
+                  <Banknote size={18} color="#ffffff" />
+                  <Text style={styles.directPayBtnText}>
+                    COBRAR (${total.toFixed(2)})
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         </ScrollView>
@@ -709,6 +791,138 @@ export const QuickSaleView: React.FC = () => {
         onClose={() => setModalVisible(false)}
         onConfirm={handleModalConfirm}
       />
+
+      {/* Modal de Cobro Extra Personalizado */}
+      <CustomExtraModal
+        visible={extraModalVisible}
+        onClose={() => setExtraModalVisible(false)}
+        defaultDestination="quick"
+      />
+
+      {/* Modal de Cobro Directo para Mostrador */}
+      <Modal visible={payModalVisible} transparent animationType="fade" onRequestClose={() => setPayModalVisible(false)}>
+        <View style={styles.payModalOverlay}>
+          <View style={styles.payModalContainer}>
+            <View style={styles.payModalHeader}>
+              <View style={styles.payModalTitleRow}>
+                <Banknote size={20} color="#b3006c" />
+                <Text style={styles.payModalTitle}>Cobro - {selectedTable.toUpperCase()}</Text>
+              </View>
+              <TouchableOpacity style={styles.payModalCloseBtn} onPress={() => setPayModalVisible(false)}>
+                <X size={18} color="#5a3f49" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Total Destacado */}
+            <View style={styles.payTotalBox}>
+              <Text style={styles.payTotalLabel}>TOTAL A PAGAR</Text>
+              <Text style={styles.payTotalAmount}>${total.toFixed(2)}</Text>
+            </View>
+
+            {/* Selector de Método de Pago */}
+            <View style={styles.payMethodRow}>
+              <TouchableOpacity
+                style={[styles.payMethodBtn, payMethod === 'cash' && styles.payMethodBtnActive]}
+                onPress={() => {
+                  setPayMethod('cash');
+                  setPayCashStr('');
+                }}
+                activeOpacity={0.8}
+              >
+                <Banknote size={16} color={payMethod === 'cash' ? '#FFF' : '#5a3f49'} />
+                <Text style={[styles.payMethodBtnText, payMethod === 'cash' && styles.payMethodBtnTextActive]}>
+                  Efectivo
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.payMethodBtn, payMethod === 'card' && styles.payMethodBtnActive]}
+                onPress={() => {
+                  setPayMethod('card');
+                  setPayCashStr(total.toFixed(2));
+                }}
+                activeOpacity={0.8}
+              >
+                <CreditCard size={16} color={payMethod === 'card' ? '#FFF' : '#5a3f49'} />
+                <Text style={[styles.payMethodBtnText, payMethod === 'card' && styles.payMethodBtnTextActive]}>
+                  Tarjeta
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.payMethodBtn, payMethod === 'transfer' && styles.payMethodBtnActive]}
+                onPress={() => {
+                  setPayMethod('transfer');
+                  setPayCashStr(total.toFixed(2));
+                }}
+                activeOpacity={0.8}
+              >
+                <Zap size={16} color={payMethod === 'transfer' ? '#FFF' : '#5a3f49'} />
+                <Text style={[styles.payMethodBtnText, payMethod === 'transfer' && styles.payMethodBtnTextActive]}>
+                  Transferencia
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Sección de Efectivo y Cambio */}
+            {payMethod === 'cash' && (
+              <View style={styles.cashSection}>
+                <Text style={styles.cashSectionLabel}>DINERO RECIBIDO ($)</Text>
+                <TextInput
+                  style={styles.cashInput}
+                  placeholder={total.toFixed(2)}
+                  placeholderTextColor="#8e6e79"
+                  keyboardType="numeric"
+                  value={payCashStr}
+                  onChangeText={setPayCashStr}
+                />
+
+                {/* Chips de Efectivo Rápido */}
+                <View style={styles.cashPresetsRow}>
+                  {[50, 100, 200, 500].filter((amt) => amt >= total).concat([total]).map((amt) => (
+                    <TouchableOpacity
+                      key={`cash-${amt}`}
+                      style={[styles.cashPresetChip, payCashStr === amt.toString() && styles.cashPresetChipActive]}
+                      onPress={() => setPayCashStr(amt.toFixed(2))}
+                    >
+                      <Text style={[styles.cashPresetChipText, payCashStr === amt.toString() && styles.cashPresetChipTextActive]}>
+                        {amt === total ? 'Exacto' : `$${amt}`}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Desglose de Cambio */}
+                <View style={styles.changeRow}>
+                  <Text style={styles.changeLabel}>CAMBIO A ENTREGAR:</Text>
+                  <Text style={styles.changeValue}>
+                    ${Math.max(0, (parseFloat(payCashStr) || total) - total).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Botón Finalizar Cobro */}
+            <TouchableOpacity
+              style={styles.confirmPayBtn}
+              onPress={handleProcessQuickPayment}
+              disabled={isProcessing}
+              activeOpacity={0.85}
+            >
+              {isProcessing ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Check size={18} color="#ffffff" />
+                  <Text style={styles.confirmPayBtnText}>
+                    FINALIZAR COBRO E IMPRIMIR
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1352,5 +1566,243 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#ffffff',
+  },
+  extraButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#b3006c',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  extraButtonText: {
+    color: '#ffffff',
+    fontSize: 11.5,
+    fontWeight: 'bold',
+  },
+  cartActionButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  preTicketBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#fff0f3',
+    borderColor: '#e2bdc9',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  preTicketBtnText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#5a3f49',
+  },
+  directPayBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#b3006c',
+    borderRadius: 14,
+    paddingVertical: 12,
+    shadowColor: '#b3006c',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  directPayBtnText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#ffffff',
+    letterSpacing: 0.5,
+  },
+  payModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(39, 23, 29, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  payModalContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    width: '100%',
+    maxWidth: 400,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  payModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffe0ea',
+    paddingBottom: 10,
+    marginBottom: 14,
+  },
+  payModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  payModalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#27171d',
+  },
+  payModalCloseBtn: {
+    padding: 6,
+    borderRadius: 16,
+    backgroundColor: '#ffe8ee',
+  },
+  payTotalBox: {
+    backgroundColor: '#fff0f3',
+    borderColor: '#b3006c',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  payTotalLabel: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#5a3f49',
+    letterSpacing: 0.8,
+  },
+  payTotalAmount: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#b3006c',
+    marginTop: 2,
+  },
+  payMethodRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 14,
+  },
+  payMethodBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#fff8f8',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+  },
+  payMethodBtnActive: {
+    backgroundColor: '#b3006c',
+    borderColor: '#b3006c',
+  },
+  payMethodBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#5a3f49',
+  },
+  payMethodBtnTextActive: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  cashSection: {
+    marginBottom: 14,
+  },
+  cashSectionLabel: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#5a3f49',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  cashInput: {
+    backgroundColor: '#fff8f8',
+    borderColor: '#b3006c',
+    borderWidth: 1.5,
+    borderRadius: 12,
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#b3006c',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    textAlign: 'center',
+  },
+  cashPresetsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  cashPresetChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: '#ffd9e5',
+  },
+  cashPresetChipActive: {
+    backgroundColor: '#b3006c',
+  },
+  cashPresetChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#b3006c',
+  },
+  cashPresetChipTextActive: {
+    color: '#ffffff',
+  },
+  changeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    borderColor: '#86efac',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 10,
+  },
+  changeLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  changeValue: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#166534',
+  },
+  confirmPayBtn: {
+    backgroundColor: '#059669',
+    borderRadius: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  confirmPayBtnText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#ffffff',
+    letterSpacing: 0.5,
   },
 });

@@ -75,7 +75,7 @@ export const POSScreen: React.FC = () => {
 
       return product.category === selectedCategoryId;
     });
-  }, [appMode, selectedCategoryId, searchQuery]);
+  }, [appMode, menuProducts, selectedCategoryId, searchQuery]);
 
   return (
     <View style={styles.container}>

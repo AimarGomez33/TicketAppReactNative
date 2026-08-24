@@ -110,7 +110,7 @@ export const QuantityModal: React.FC<Props> = ({
                   selectTextOnFocus
                 />
 
-                <Text style={[styles.sectionLabel, { marginTop: 10 }]}>NOMBRE / CONCEPTO</Text>
+                <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>NOMBRE / CONCEPTO</Text>
                 <TextInput
                   style={styles.customNameInput}
                   placeholder="Ej. Guacamole extra, Envío, etc."
@@ -321,6 +321,9 @@ const styles = StyleSheet.create({
     color: '#5a3f49',
     letterSpacing: 0.8,
     marginBottom: 8,
+  },
+  sectionLabelSpaced: {
+    marginTop: 10,
   },
   counterRow: {
     flexDirection: 'row',

@@ -7,7 +7,7 @@ import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 const PRINTER_CONFIG = {
   host: SUPABASE_CONFIG.printerHost,
   port: SUPABASE_CONFIG.printerPort,
-  timeout: 3500,
+  timeout: 6000, // 6 segundos para redes Wi-Fi con jitter
 };
 
 const ESC_POS = {
@@ -35,6 +35,28 @@ export interface PrintOptions {
   orderId?: string;
 }
 
+/**
+ * Sanitiza texto para impresoras térmicas ESC/POS:
+ * Remueve acentos y caracteres especiales que congelan el buffer de la impresora
+ */
+export const sanitizeEscPosText = (text: string): string => {
+  return text
+    .replace(/[áàäâ]/g, 'a')
+    .replace(/[éèëê]/g, 'e')
+    .replace(/[íìïî]/g, 'i')
+    .replace(/[óòöô]/g, 'o')
+    .replace(/[úùüû]/g, 'u')
+    .replace(/[ÁÀÄÂ]/g, 'A')
+    .replace(/[ÉÈËÊ]/g, 'E')
+    .replace(/[ÍÌÏÎ]/g, 'I')
+    .replace(/[ÓÒÖÔ]/g, 'O')
+    .replace(/[ÚÙÜÛ]/g, 'U')
+    .replace(/[ñ]/g, 'n')
+    .replace(/[Ñ]/g, 'N')
+    .replace(/[¿¡]/g, '')
+    .replace(/[^\x20-\x7E\n\r\t]/g, ''); // Solo caracteres ASCII imprimibles
+};
+
 export const generateEscPosBuffer = (
   tableNumber: string,
   items: CartItem[],
@@ -49,7 +71,7 @@ export const generateEscPosBuffer = (
   // Filtrar ítems por estación si se especifica comanda de cocina
   let targetItems = items;
   if (isKitchen && station !== 'all') {
-    targetItems = items.filter(it => {
+    targetItems = items.filter((it) => {
       const itemStation = it.product.kitchenStation || 'mexican';
       return itemStation === station;
     });
@@ -58,8 +80,9 @@ export const generateEscPosBuffer = (
   const bytes: number[] = [];
   const addBytes = (arr: number[]) => bytes.push(...arr);
   const addText = (text: string) => {
-    for (let i = 0; i < text.length; i++) {
-      bytes.push(text.charCodeAt(i));
+    const cleanText = sanitizeEscPosText(text);
+    for (let i = 0; i < cleanText.length; i++) {
+      bytes.push(cleanText.charCodeAt(i));
     }
   };
 
@@ -90,8 +113,12 @@ export const generateEscPosBuffer = (
     addText('================================\n');
 
     // Separar platillos nuevos (pending o de la ronda actual) vs anteriores (ya enviados)
-    const newItems = targetItems.filter(it => it.status === 'pending' || (it.round && it.round === currentRound));
-    const previousItems = targetItems.filter(it => it.status === 'sent_to_kitchen' && it.round && it.round < currentRound);
+    const newItems = targetItems.filter(
+      (it) => it.status === 'pending' || (it.round && it.round === currentRound)
+    );
+    const previousItems = targetItems.filter(
+      (it) => it.status === 'sent_to_kitchen' && it.round && it.round < currentRound
+    );
 
     addBytes(ESC_POS.ALIGN_LEFT);
 
@@ -135,8 +162,7 @@ export const generateEscPosBuffer = (
     addBytes(ESC_POS.TXT_BOLD_ON);
     addText(`Total en esta comanda: ${totalQty} articulos\n`);
     addBytes(ESC_POS.TXT_BOLD_OFF);
-    addText('¡Comanda lista para preparar!\n\n\n');
-
+    addText('Comanda lista para preparar!\n\n\n');
   } else {
     // Ticket de Cobro / Cliente / Mostrador
     if (options?.isReprint) {
@@ -193,17 +219,17 @@ export const generateEscPosBuffer = (
     }
 
     addText('--------------------------------\n');
-    addText('¡Muchas gracias por su preferencia!\n\n\n');
+    addText('Muchas gracias por su preferencia!\n\n\n');
   }
 
   addBytes(ESC_POS.CUT_PAPER);
   return new Uint8Array(bytes);
 };
 
-// Encolado secuencial para que 2 tickets nunca compitan por el socket al mismo tiempo
-let printQueue = Promise.resolve(true);
-
-const executeSinglePrint = (
+/**
+ * Ejecuta una impresión directa con socket TCP y gestión de ciclo de vida seguro
+ */
+const executeSocketTransmission = (
   payload: Uint8Array,
   host: string,
   port: number,
@@ -216,79 +242,92 @@ const executeSinglePrint = (
     const cleanup = () => {
       if (client) {
         try {
+          client.removeAllListeners();
           client.destroy();
         } catch {}
+        client = null;
       }
     };
 
-    client = TcpSocket.createConnection({ host, port }, () => {
-      try {
-        client.write(Buffer.from(payload), (err?: any) => {
-          if (err && !dataSent) {
-            if (!isFinished) {
-              isFinished = true;
-              cleanup();
-              reject(err);
+    try {
+      client = TcpSocket.createConnection({ host, port }, () => {
+        try {
+          const buffer = Buffer.from(payload);
+          client.write(buffer, (err?: any) => {
+            if (err && !dataSent) {
+              if (!isFinished) {
+                isFinished = true;
+                cleanup();
+                reject(err);
+              }
+              return;
             }
-            return;
-          }
 
-          dataSent = true;
-          // Espera de 200ms para vaciar buffers en la interfaz de red antes de destruir
-          setTimeout(() => {
-            if (!isFinished) {
-              isFinished = true;
-              cleanup();
-              resolve(true);
-            }
-          }, 200);
-        });
-      } catch (err) {
+            dataSent = true;
+            // Espera de 250ms para que la impresora procese el corte de papel antes de cerrar
+            setTimeout(() => {
+              if (!isFinished) {
+                isFinished = true;
+                cleanup();
+                resolve(true);
+              }
+            }, 250);
+          });
+        } catch (err) {
+          if (!isFinished) {
+            isFinished = true;
+            cleanup();
+            reject(err);
+          }
+        }
+      });
+
+      client.setTimeout(PRINTER_CONFIG.timeout);
+
+      client.on('timeout', () => {
         if (!isFinished) {
           isFinished = true;
           cleanup();
-          reject(err);
+          if (dataSent) {
+            resolve(true);
+          } else {
+            reject(new Error(`Timeout (${PRINTER_CONFIG.timeout}ms): Impresora en ${host}:${port} no respondió.`));
+          }
         }
-      }
-    });
+      });
 
-    client.setTimeout(PRINTER_CONFIG.timeout);
-
-    client.on('timeout', () => {
-      if (!isFinished) {
-        isFinished = true;
-        cleanup();
-        if (dataSent) {
-          resolve(true);
-        } else {
-          reject(new Error(`Timeout: La impresora en ${host}:${port} no respondió`));
+      client.on('error', (error: any) => {
+        if (!isFinished) {
+          if (dataSent) {
+            isFinished = true;
+            cleanup();
+            resolve(true);
+          } else {
+            isFinished = true;
+            cleanup();
+            reject(error);
+          }
         }
-      }
-    });
+      });
 
-    client.on('error', (error: any) => {
-      if (!isFinished) {
-        // Si los bytes ya se escribieron a la impresora, ignoramos errores de reset de cierre
-        if (dataSent) {
+      client.on('close', () => {
+        if (!isFinished) {
           isFinished = true;
           cleanup();
           resolve(true);
-        } else {
-          isFinished = true;
-          cleanup();
-          reject(error);
         }
-      }
-    });
-
-    client.on('close', () => {
-      if (!isFinished) {
-        isFinished = true;
-        resolve(true);
-      }
-    });
+      });
+    } catch (createErr) {
+      cleanup();
+      reject(createErr);
+    }
   });
 };
+
+/**
+ * Cola de impresión serializada con reintento automático
+ */
+let printQueueChain = Promise.resolve(true);
 
 export const printTicketTCP = async (
   tableNumber: string,
@@ -302,10 +341,22 @@ export const printTicketTCP = async (
   const host = customHost || PRINTER_CONFIG.host;
   const port = customPort || PRINTER_CONFIG.port;
 
-  const task = async () => {
-    return executeSinglePrint(payload, host, port);
+  const runWithRetry = async (): Promise<boolean> => {
+    try {
+      return await executeSocketTransmission(payload, host, port);
+    } catch (firstErr) {
+      console.warn('Primer intento de impresion fallo, reintentando en 350ms...', firstErr);
+      await new Promise<void>((res) => setTimeout(() => res(), 350));
+      return await executeSocketTransmission(payload, host, port);
+    }
   };
 
-  printQueue = printQueue.then(task).catch(task);
-  return printQueue;
+  printQueueChain = printQueueChain
+    .then(runWithRetry)
+    .catch(runWithRetry)
+    .then(
+      (res) => new Promise<boolean>((resolve) => setTimeout(() => resolve(res), 200))
+    );
+
+  return printQueueChain;
 };

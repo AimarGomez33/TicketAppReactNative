@@ -135,7 +135,12 @@ interface CartState {
   clearQuickSale: () => void;
   getQuickSaleTotal: () => number;
   getQuickSaleItemCount: () => number;
-  createQuickSaleOrder: (tableNumber?: string) => Promise<OrderHistoryItem | null>;
+  createQuickSaleOrder: (
+    tableNumber?: string,
+    paymentMethod?: 'cash' | 'card' | 'transfer',
+    amountPaid?: number,
+    changeGiven?: number,
+  ) => Promise<OrderHistoryItem | null>;
   loadQuickSaleOrderForEdit: (orderId: string) => void;
   cancelEditQuickSaleOrder: () => void;
   updateAndSaveQuickSaleOrder: (orderId: string, tableNumber?: string) => Promise<boolean>;
@@ -842,7 +847,12 @@ export const useCartStore = create<CartState>((set, get) => ({
     return items.reduce((sum, it) => sum + it.quantity, 0);
   },
 
-  createQuickSaleOrder: async (tableNumber = 'Llevar') => {
+  createQuickSaleOrder: async (
+    tableNumber = 'Llevar',
+    paymentMethod: 'cash' | 'card' | 'transfer' = 'cash',
+    amountPaid?: number,
+    changeGiven?: number,
+  ) => {
     const state = get();
     const items = Object.values(state.quickSaleCart);
     if (items.length === 0) return null;
@@ -850,6 +860,9 @@ export const useCartStore = create<CartState>((set, get) => ({
     const total = state.getQuickSaleTotal();
     const cleanTable = tableNumber.trim() || 'Llevar';
     const orderId = `ORD-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+    const paid = amountPaid !== undefined ? amountPaid : total;
+    const change = changeGiven !== undefined ? changeGiven : Math.max(0, paid - total);
+
     const newOrder: OrderHistoryItem = {
       id: orderId,
       tableNumber: cleanTable,
@@ -860,7 +873,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     };
 
     if (isSupabaseConfigured()) {
-      await finalizePaymentInSupabase(cleanTable, 'cash', total, 0, total);
+      await finalizePaymentInSupabase(cleanTable, paymentMethod, total, change, paid);
     }
 
     set((prev) => ({

@@ -1,9 +1,9 @@
-// src/components/HeaderBar.tsx
 import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useCartStore } from '../store/useCartStore';
-import { Search, Printer, Wifi, Menu, Database, Utensils, Layers } from 'lucide-react-native';
+import { Search, Printer, Wifi, Menu, Database, Utensils, Layers, CircleDollarSign } from 'lucide-react-native';
 import { SupabaseConfigModal } from './SupabaseConfigModal';
+import { CustomExtraModal } from './CustomExtraModal';
 
 interface Props {
   searchQuery: string;
@@ -17,6 +17,7 @@ export const HeaderBar: React.FC<Props> = ({
   isPrinterConnected = true,
 }) => {
   const [configModalVisible, setConfigModalVisible] = useState(false);
+  const [extraModalVisible, setExtraModalVisible] = useState(false);
 
   const tableNumber = useCartStore(state => state.tableNumber);
   const setActiveTab = useCartStore(state => state.setActiveTab);
@@ -119,23 +120,40 @@ export const HeaderBar: React.FC<Props> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Fila Inferior: Buscador en Tiempo Real */}
-        <View style={styles.searchContainer}>
-          <Search size={18} color="#ab286c" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={
-              appMode === 'general'
-                ? 'Buscar platillo general (ej. Quesadilla, Taco...)'
-                : 'Buscar platillo específico (ej. Tinga, Arrachera...)'
-            }
-            placeholderTextColor="#8e6e79"
-            value={searchQuery}
-            onChangeText={onSearchChange}
-            clearButtonMode="while-editing"
-          />
+        {/* Fila Inferior: Buscador en Tiempo Real + Botón de Cobro Extra */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchContainer}>
+            <Search size={18} color="#ab286c" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder={
+                appMode === 'general'
+                  ? 'Buscar platillo general...'
+                  : 'Buscar platillo específico...'
+              }
+              placeholderTextColor="#8e6e79"
+              value={searchQuery}
+              onChangeText={onSearchChange}
+              clearButtonMode="while-editing"
+            />
+          </View>
+
+          <TouchableOpacity
+            style={styles.quickExtraBtn}
+            onPress={() => setExtraModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <CircleDollarSign size={16} color="#FFF" />
+            <Text style={styles.quickExtraBtnText}>+ Extra $</Text>
+          </TouchableOpacity>
         </View>
       </View>
+
+      {/* Modal de Cobro Extra Personalizado */}
+      <CustomExtraModal
+        visible={extraModalVisible}
+        onClose={() => setExtraModalVisible(false)}
+      />
 
       {/* Modal de Configuración Supabase */}
       <SupabaseConfigModal
@@ -244,7 +262,13 @@ const styles = StyleSheet.create({
     color: '#b3006c',
     fontWeight: '800',
   },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   searchContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff0f3',
@@ -263,5 +287,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     padding: 0,
     fontWeight: '500',
+  },
+  quickExtraBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#b3006c',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    height: 40,
+    shadowColor: '#b3006c',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  quickExtraBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
