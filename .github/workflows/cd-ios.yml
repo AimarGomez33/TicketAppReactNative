@@ -63,7 +63,29 @@ jobs:
         run: |
           pod install
 
-      - name: 🏗️ Verify iOS Build Configuration
+      - name: 🏗️ Build iOS Release Binary
         working-directory: ios
         run: |
-          xcodebuild -workspace TicketAppPOS.xcworkspace -scheme TicketAppPOS -configuration Release clean -showBuildSettings | grep PRODUCT_NAME || true
+          xcodebuild -workspace TicketAppPOS.xcworkspace \
+            -scheme TicketAppPOS \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: 📦 Package .IPA Payload
+        run: |
+          mkdir -p build/Payload
+          cp -r ios/build/Build/Products/Release-iphoneos/TicketAppPOS.app build/Payload/
+          cd build && zip -r TicketAppPOS.ipa Payload
+          cd ..
+
+      - name: 📤 Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ticketapp-ios-release
+          path: build/TicketAppPOS.ipa
+          retention-days: 14
