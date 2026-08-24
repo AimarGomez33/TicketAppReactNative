@@ -419,13 +419,74 @@ export const fetchMenuProductsFromSupabase = async (): Promise<Product[] | null>
   }
 };
 
+export interface BroadcastTableStatePayload {
+  tableNumber: string;
+  status: TableStatus;
+  cart: Record<string, CartItem>;
+  currentRound: number;
+  waiterName?: string;
+  isBillRequested?: boolean;
+}
+
+export interface BroadcastKitchenStatusPayload {
+  tableNumber: string;
+  itemId: string;
+  status: 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready';
+}
+
+export const reinitializeSupabaseClient = () => {
+  if (realtimeChannel && supabaseClient) {
+    try {
+      supabaseClient.removeChannel(realtimeChannel);
+    } catch {
+      // ignore
+    }
+    realtimeChannel = null;
+  }
+  supabaseClient = null;
+};
+
+export const broadcastTableState = async (payload: BroadcastTableStatePayload) => {
+  if (realtimeChannel) {
+    try {
+      await realtimeChannel.send({
+        type: 'broadcast',
+        event: 'TABLE_STATE_SYNC',
+        payload,
+      });
+    } catch (err) {
+      console.warn('Error broadcasting table state:', err);
+    }
+  }
+};
+
+export const broadcastKitchenItemStatus = async (
+  tableNumber: string,
+  itemId: string,
+  status: 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready'
+) => {
+  if (realtimeChannel) {
+    try {
+      await realtimeChannel.send({
+        type: 'broadcast',
+        event: 'KITCHEN_ITEM_STATUS',
+        payload: { tableNumber, itemId, status },
+      });
+    } catch (err) {
+      console.warn('Error broadcasting kitchen status:', err);
+    }
+  }
+};
+
 /**
- * Suscripción en Tiempo Real a eventos de mesas, órdenes y menú
+ * Suscripción en Tiempo Real a eventos de mesas, órdenes, comandas y menú
  */
 export const subscribeToRealtimeChanges = (
   onTableChange: (table: RemoteTableUpdate) => void,
   onOrderChange?: (order: RemoteOrderUpdate) => void,
-  onMenuChange?: () => void
+  onMenuChange?: () => void,
+  onTableCartSync?: (payload: BroadcastTableStatePayload) => void,
+  onKitchenStatusSync?: (payload: BroadcastKitchenStatusPayload) => void
 ): (() => void) => {
   const supabase = getSupabase();
   if (!supabase) {
@@ -433,11 +494,19 @@ export const subscribeToRealtimeChanges = (
   }
 
   if (realtimeChannel) {
-    supabase.removeChannel(realtimeChannel);
+    try {
+      supabase.removeChannel(realtimeChannel);
+    } catch {
+      // ignore
+    }
   }
 
   realtimeChannel = supabase
-    .channel('pos-realtime-channel')
+    .channel('pos-realtime-channel', {
+      config: {
+        broadcast: { self: false },
+      },
+    })
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'tables_state' },
@@ -484,11 +553,25 @@ export const subscribeToRealtimeChanges = (
         if (onMenuChange) onMenuChange();
       }
     )
+    .on('broadcast', { event: 'TABLE_STATE_SYNC' }, ({ payload }) => {
+      if (onTableCartSync && payload) {
+        onTableCartSync(payload as BroadcastTableStatePayload);
+      }
+    })
+    .on('broadcast', { event: 'KITCHEN_ITEM_STATUS' }, ({ payload }) => {
+      if (onKitchenStatusSync && payload) {
+        onKitchenStatusSync(payload as BroadcastKitchenStatusPayload);
+      }
+    })
     .subscribe();
 
   return () => {
     if (realtimeChannel && supabase) {
-      supabase.removeChannel(realtimeChannel);
+      try {
+        supabase.removeChannel(realtimeChannel);
+      } catch {
+        // ignore
+      }
       realtimeChannel = null;
     }
   };

@@ -9,6 +9,8 @@ import {
   finalizePaymentInSupabase,
   clearTableInSupabase,
   subscribeToRealtimeChanges,
+  broadcastTableState,
+  broadcastKitchenItemStatus,
   fetchMenuCategoriesFromSupabase,
   fetchMenuProductsFromSupabase,
   RemoteTableUpdate,
@@ -57,6 +59,7 @@ export interface TableOrder {
   currentRound?: number;
   lastUpdated?: string;
   waiterName?: string;
+  isBillRequested?: boolean;
 }
 
 export interface OrderHistoryItem {
@@ -172,8 +175,30 @@ const initialTables = (): Record<string, TableOrder> => {
 
 // Helper con debounce para evitar llamadas masivas simultáneas a Supabase
 let syncTimeoutId: any = null;
-const debouncedSync = (tableNumber: string, items: CartItem[], total: number, waiterName?: string) => {
-  if (!isSupabaseConfigured() || !tableNumber) return;
+const debouncedSync = (
+  tableNumber: string,
+  items: CartItem[],
+  total: number,
+  waiterName?: string,
+  status: TableStatus = 'busy',
+  round: number = 1
+) => {
+  if (!tableNumber) return;
+
+  // Broadcast realtime (<30ms) a todas las demás terminales/celulares conectados
+  const cartRecord: Record<string, CartItem> = {};
+  items.forEach((it) => {
+    cartRecord[it.product.id] = it;
+  });
+  broadcastTableState({
+    tableNumber,
+    status,
+    cart: cartRecord,
+    currentRound: round,
+    waiterName,
+  });
+
+  if (!isSupabaseConfigured()) return;
   if (syncTimeoutId) {
     clearTimeout(syncTimeoutId);
   }
@@ -352,6 +377,54 @@ export const useCartStore = create<CartState>((set, get) => ({
       },
       () => {
         get().loadMenuFromRemote();
+      },
+      (cartSyncPayload) => {
+        set((state) => {
+          const tbl = cartSyncPayload.tableNumber;
+          const updatedTables = { ...state.tables };
+          updatedTables[tbl] = {
+            status: cartSyncPayload.status,
+            cart: cartSyncPayload.cart || {},
+            currentRound: cartSyncPayload.currentRound || 1,
+            waiterName: cartSyncPayload.waiterName,
+            lastUpdated: new Date().toLocaleTimeString(),
+            isBillRequested: cartSyncPayload.isBillRequested,
+          };
+          const isCurrentTable = state.tableNumber === tbl;
+          return {
+            tables: updatedTables,
+            cart: isCurrentTable ? (cartSyncPayload.cart || {}) : state.cart,
+          };
+        });
+      },
+      (kitchenPayload) => {
+        set((state) => {
+          const tbl = kitchenPayload.tableNumber;
+          const updatedTables = { ...state.tables };
+          if (updatedTables[tbl] && updatedTables[tbl].cart && updatedTables[tbl].cart[kitchenPayload.itemId]) {
+            updatedTables[tbl] = {
+              ...updatedTables[tbl],
+              cart: {
+                ...updatedTables[tbl].cart,
+                [kitchenPayload.itemId]: {
+                  ...updatedTables[tbl].cart[kitchenPayload.itemId],
+                  status: kitchenPayload.status,
+                },
+              },
+            };
+          }
+          let updatedCart = state.cart;
+          if (state.tableNumber === tbl && updatedCart[kitchenPayload.itemId]) {
+            updatedCart = {
+              ...updatedCart,
+              [kitchenPayload.itemId]: {
+                ...updatedCart[kitchenPayload.itemId],
+                status: kitchenPayload.status,
+              },
+            };
+          }
+          return { tables: updatedTables, cart: updatedCart };
+        });
       }
     );
   },
@@ -596,7 +669,8 @@ export const useCartStore = create<CartState>((set, get) => ({
       };
     }),
 
-  updateItemKitchenStatus: (tableNumber, productId, status) =>
+  updateItemKitchenStatus: (tableNumber, productId, status) => {
+    broadcastKitchenItemStatus(tableNumber, productId, status);
     set((state) => {
       const updatedTables = { ...state.tables };
       const tableOrder = updatedTables[tableNumber];
@@ -619,13 +693,22 @@ export const useCartStore = create<CartState>((set, get) => ({
         tables: updatedTables,
         cart: state.tableNumber === tableNumber ? updatedCart : state.cart,
       };
-    }),
+    });
+  },
 
   clearCart: () => {
     const state = get();
     const activeTable = state.tableNumber;
-    if (activeTable && isSupabaseConfigured()) {
-      clearTableInSupabase(activeTable);
+    if (activeTable) {
+      broadcastTableState({
+        tableNumber: activeTable,
+        status: 'free',
+        cart: {},
+        currentRound: 1,
+      });
+      if (isSupabaseConfigured()) {
+        clearTableInSupabase(activeTable);
+      }
     }
 
     set((prev) => {
@@ -688,6 +771,14 @@ export const useCartStore = create<CartState>((set, get) => ({
       };
     });
 
+    broadcastTableState({
+      tableNumber: tableToUse,
+      status: 'busy',
+      cart: updatedCart,
+      currentRound: nextRound,
+      waiterName: currentTableOrder?.waiterName,
+    });
+
     set((prev) => {
       const updatedTables = { ...prev.tables };
       updatedTables[tableToUse] = {
@@ -717,6 +808,15 @@ export const useCartStore = create<CartState>((set, get) => ({
     const tableToUse = tbl || state.tableNumber;
     if (!tableToUse) return false;
 
+    broadcastTableState({
+      tableNumber: tableToUse,
+      status: 'bill_requested',
+      cart: state.tables[tableToUse]?.cart || {},
+      currentRound: state.tables[tableToUse]?.currentRound || 1,
+      waiterName: state.tables[tableToUse]?.waiterName,
+      isBillRequested: true,
+    });
+
     set((prev) => {
       const updatedTables = { ...prev.tables };
       if (updatedTables[tableToUse]) {
@@ -745,7 +845,15 @@ export const useCartStore = create<CartState>((set, get) => ({
     const activeCart = Object.values(state.cart);
     if (activeCart.length === 0) return;
 
-    const total = state.getTotal();
+    const total = get().getTotal();
+
+    broadcastTableState({
+      tableNumber: activeTable,
+      status: 'cleaning',
+      cart: {},
+      currentRound: 1,
+    });
+
     const newOrder: OrderHistoryItem = {
       id: Math.random().toString(36).substr(2, 9).toUpperCase(),
       tableNumber: activeTable,

@@ -8,6 +8,8 @@ import {
   TextInput,
   StyleSheet,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Product } from '../store/useCartStore';
 import { X, Plus, Minus, Check } from 'lucide-react-native';
@@ -106,7 +108,10 @@ export const QuantityModal: React.FC<Props> = ({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.modalContainer}>
           {/* Header */}
           <View style={styles.header}>
@@ -123,7 +128,11 @@ export const QuantityModal: React.FC<Props> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent}
+          >
             {/* Selector de Guisado / Variante / Sabor */}
             {(customVariants.length > 0 || product.category === 'bebidas' || product.category === 'quesadillas') && (
               <View style={styles.variantsSection}>
@@ -306,7 +315,7 @@ export const QuantityModal: React.FC<Props> = ({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -318,6 +327,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   modalContainer: {
     backgroundColor: '#ffffff',

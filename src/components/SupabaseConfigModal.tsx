@@ -8,10 +8,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Database, X, Check, Globe, KeyRound, Radio } from 'lucide-react-native';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 import { useCartStore } from '../store/useCartStore';
+import { reinitializeSupabaseClient } from '../services/supabaseService';
 
 interface Props {
   visible: boolean;
@@ -30,6 +33,7 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
     SUPABASE_CONFIG.url = url.trim();
     SUPABASE_CONFIG.anonKey = anonKey.trim();
 
+    reinitializeSupabaseClient();
     initRealtimeSync();
 
     showCustomAlert({
@@ -48,7 +52,10 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.card}>
           <View style={styles.header}>
             <View style={styles.titleRow}>
@@ -60,7 +67,7 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.statusBox}>
               <Text style={styles.statusLabel}>Estado de Sincronización:</Text>
               <View style={[styles.statusBadge, isRealtimeConnected ? styles.statusBadgeConnected : styles.statusBadgeOffline]}>
@@ -113,7 +120,7 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
