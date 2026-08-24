@@ -491,7 +491,13 @@ export const QuickSaleView: React.FC = () => {
                     {/* Botón Rápido +10 */}
                     <TouchableOpacity
                       style={styles.pillQuick10Btn}
-                      onPress={() => addQuickSaleItem(product, 10)}
+                      onPress={() => {
+                        if (product.variants && product.variants.length > 0) {
+                          openQuantityModal(product);
+                        } else {
+                          addQuickSaleItem(product, 10);
+                        }
+                      }}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.pillQuick10Text}>+10</Text>
@@ -500,7 +506,13 @@ export const QuickSaleView: React.FC = () => {
                     {/* Botón +1 o Badge con cantidad actual */}
                     <TouchableOpacity
                       style={[styles.qtyBadge, qty > 0 && styles.qtyBadgeActive]}
-                      onPress={() => addQuickSaleItem(product, 1)}
+                      onPress={() => {
+                        if (product.variants && product.variants.length > 0) {
+                          openQuantityModal(product);
+                        } else {
+                          addQuickSaleItem(product, 1);
+                        }
+                      }}
                       activeOpacity={0.7}
                     >
                       {qty > 0 ? (

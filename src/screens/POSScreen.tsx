@@ -38,39 +38,21 @@ export const POSScreen: React.FC = () => {
 
       // Filtro por categoría seleccionada
       if (selectedCategoryId === 'top') {
-        if (appMode === 'general') {
-          return [
-            'gen-chalupa',
-            'gen-quesadilla',
-            'gen-tostada',
-            'gen-pambazo-adob',
-            'gen-guajolota',
-            'gen-guajoloyet-adob',
-            'gen-pozole-grande',
-            'gen-taco',
-            'gen-burg-especial',
-            'gen-alitas-6',
-            'gen-papas-boneless',
-            'gen-refresco',
-            'gen-agua-500',
-          ].includes(product.id);
-        } else {
-          return [
-            'gen-chalupa',
-            'q-bistec',
-            'q-tinga',
-            'tost-pata',
-            'gj-bistec',
-            'gen-guajoloyet-adob',
-            'gen-pozole-grande',
-            'gen-pambazo-adob',
-            'gen-burg-especial',
-            'tac-arrachera',
-            'gen-alitas-6',
-            'gen-papas-boneless',
-            'gen-refresco',
-          ].includes(product.id);
-        }
+        return [
+          'gen-chalupa',
+          'gen-quesadilla',
+          'gen-tostada',
+          'gen-pambazo-adob',
+          'gen-guajolota',
+          'gen-guajoloyet-adob',
+          'gen-pozole-grande',
+          'gen-taco',
+          'gen-burg-especial',
+          'gen-alitas-6',
+          'gen-papas-boneless',
+          'gen-refresco',
+          'gen-agua-500',
+        ].includes(product.id);
       }
 
       return product.category === selectedCategoryId;

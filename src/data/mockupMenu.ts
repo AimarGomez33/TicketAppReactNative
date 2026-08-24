@@ -555,79 +555,9 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
 ];
 
 // ==========================================
-// MENÚ DETALLADO (Desglose individual de cada guisado y variedad)
+// MENÚ DETALLADO (Tarjetas limpias con selector interactivo de variantes al pulsar)
 // ==========================================
-export const MOCK_PRODUCTS_DETAILED: Product[] = [
-  // --- ANTOJITOS ---
-  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'antojitos'),
-
-  // --- QUESADILLAS ($33 c/u) ---
-  { id: 'q-queso', name: 'Quesadilla de Queso', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican', description: 'Tortilla de maíz con abundante queso Oaxaca fundido' },
-  { id: 'q-tinga', name: 'Quesadilla Tinga de Pollo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-bistec', name: 'Quesadilla Bistec', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-huitla', name: 'Quesadilla Huitlacoche', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-chich', name: 'Quesadilla Chicharrón Prensado', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-huevo', name: 'Quesadilla Huevo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-molleja', name: 'Quesadilla Molleja', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-chorizo', name: 'Quesadilla Chorizo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-picadillo', name: 'Quesadilla Picadillo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-mole-verde', name: 'Quesadilla Mole Verde', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-panza', name: 'Quesadilla Panza', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-champ', name: 'Quesadilla Champiñones', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-pollo', name: 'Quesadilla Pollo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-bistec-nopales', name: 'Quesadilla Bistec con Nopales', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-  { id: 'q-papa-chorizo', name: 'Quesadilla Papa con Chorizo', price: 33.0, category: 'quesadillas', kitchenStation: 'mexican' },
-
-  // --- TOSTADAS ($37 c/u) ---
-  { id: 'tost-pata', name: 'Tostada Pata de Res', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
-  { id: 'tost-tinga', name: 'Tostada Tinga de Pollo', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
-  { id: 'tost-picadillo', name: 'Tostada Picadillo', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
-  { id: 'tost-mole-verde', name: 'Tostada Mole Verde', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
-  { id: 'tost-panza', name: 'Tostada Panza', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
-  { id: 'tost-champ', name: 'Tostada Champiñones', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
-  { id: 'tost-pollo', name: 'Tostada Pollo', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
-  { id: 'tost-bistec-nopales', name: 'Tostada Bistec con Nopales', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
-  { id: 'tost-papa-chorizo', name: 'Tostada Papa con Chorizo', price: 37.0, category: 'tostadas', kitchenStation: 'mexican' },
-
-  // --- GUAJOLOYET & POZOLE ---
-  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'pambazos' || p.category === 'pozole'),
-
-  // --- GUAJOLOTAS / VOLCANES ($60 c/u) ---
-  { id: 'gj-queso', name: 'Guajolota Queso', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-pollo', name: 'Guajolota Pollo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-papa-chorizo', name: 'Guajolota Papa con Chorizo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-tinga', name: 'Guajolota Tinga de Pollo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-bistec', name: 'Guajolota Bistec', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-huitla', name: 'Guajolota Huitlacoche', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-chich', name: 'Guajolota Chicharrón', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-huevo', name: 'Guajolota Huevo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-molleja', name: 'Guajolota Molleja', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-picadillo', name: 'Guajolota Picadillo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-mole-verde', name: 'Guajolota Mole Verde', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-panza', name: 'Guajolota Panza', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-champ', name: 'Guajolota Champiñones', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-bistec-nopales', name: 'Guajolota Bistec con Nopales', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-  { id: 'gj-chorizo', name: 'Guajolota Chorizo', price: 60.0, category: 'guajolotas', kitchenStation: 'mexican' },
-
-  // --- HAMBURGUESAS ---
-  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'hamburguesas'),
-
-  // --- ALITAS ---
-  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'alitas'),
-
-  // --- TACOS ($35 c/u) ---
-  { id: 'tac-arrachera', name: 'Taco de Arrachera', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
-  { id: 'tac-costilla', name: 'Taco de Costilla', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
-  { id: 'tac-enchilada', name: 'Taco de Carne Enchilada', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
-  { id: 'tac-bistec', name: 'Taco de Bistec', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
-  { id: 'tac-chorizo', name: 'Taco de Chorizo', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
-  { id: 'tac-campechano', name: 'Taco Campechano', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
-  { id: 'tac-chistorra', name: 'Taco de Chistorra', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
-  { id: 'tac-argentino', name: 'Taco de Chorizo Argentino', price: 35.0, category: 'tacos', kitchenStation: 'american_tacos', description: 'Harina o maíz, nopales y perejil frito' },
-
-  // --- PAPAS & BEBIDAS & EXTRAS ---
-  ...MOCK_PRODUCTS_GENERAL.filter(p => p.category === 'papas' || p.category === 'bebidas' || p.category === 'extras'),
-];
+export const MOCK_PRODUCTS_DETAILED: Product[] = MOCK_PRODUCTS_GENERAL;
 
 export const MOCK_PRODUCTS: Product[] = MOCK_PRODUCTS_GENERAL;
 
