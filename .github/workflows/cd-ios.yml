@@ -15,7 +15,7 @@ on:
 jobs:
   build-ios-release:
     name: Build & Archive iOS Release (IPA)
-    runs-on: macos-14
+    runs-on: macos-15
 
     steps:
       - name: 📥 Checkout Repository
