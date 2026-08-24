@@ -28,7 +28,6 @@ import {
   Printer,
   Edit3,
   Clock,
-  RotateCcw,
   FileText,
   Layers,
   Zap,
@@ -38,7 +37,6 @@ import {
   CircleDollarSign,
   CreditCard,
   Banknote,
-  Check,
 } from 'lucide-react-native';
 
 type SubViewTab = 'editor' | 'history';
@@ -58,7 +56,6 @@ export const QuickSaleView: React.FC = () => {
   const [extraModalVisible, setExtraModalVisible] = useState<boolean>(false);
   const [payModalVisible, setPayModalVisible] = useState<boolean>(false);
   const [payMethod, setPayMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
-  const [payCashStr, setPayCashStr] = useState<string>('');
 
   const appMode = useCartStore((state) => state.appMode);
   const menuProducts = useCartStore((state) => state.menuProducts);
@@ -144,7 +141,6 @@ export const QuickSaleView: React.FC = () => {
 
   const openPayModal = () => {
     setPayMethod('cash');
-    setPayCashStr('');
     setPayModalVisible(true);
   };
 

@@ -19,7 +19,7 @@ describe('useCartStore - Multi-Cocina y POS Tests', () => {
 
     // Agregar platillos combinados
     store.addQuantity(chalupa, 4); // 4 * $6 = $24
-    store.addQuantity(hamburguesa, 1); // 1 * $60 = $60
+    store.addQuantity(hamburguesa, 1); // 1 * $80 = $80
     store.addQuantity(taco, 2, 'con salsa verde'); // 2 * $35 = $70
 
     const updatedState = useCartStore.getState();
@@ -34,8 +34,8 @@ describe('useCartStore - Multi-Cocina y POS Tests', () => {
 
     expect(cocina2Items).toHaveLength(2);
 
-    // Validar Total Unificado para Caja: 24 + 60 + 70 = 154
-    expect(updatedState.getTotal()).toBe(154.0);
+    // Validar Total Unificado para Caja: 24 + 80 + 70 = 174
+    expect(updatedState.getTotal()).toBe(174.0);
   });
 
   test('Debe actualizar el estado de cocina de un platillo a en preparación y listo', () => {

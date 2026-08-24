@@ -18,7 +18,6 @@ import {
   CheckCircle2,
   Clock,
   BellRing,
-  Smartphone,
   Printer,
 } from 'lucide-react-native';
 import { printTicketTCP } from '../services/printerService';

@@ -1,5 +1,5 @@
 // src/screens/PaymentScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
@@ -41,7 +41,6 @@ export function PaymentScreen() {
   // Local state - Nunca forzar modo automáticamente para no atrapar al cajero
   const [cashierMode, setCashierMode] = useState<CashierViewMode>('quick');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [receivedCashStr, setReceivedCashStr] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const total = getTotal();
@@ -66,13 +65,6 @@ export function PaymentScreen() {
       };
     });
 
-  useEffect(() => {
-    if (paymentMethod !== 'cash') {
-      setReceivedCashStr(total.toFixed(2));
-    } else {
-      setReceivedCashStr('');
-    }
-  }, [paymentMethod, total]);
 
   // Si está en modo Venta Rápida / Mostrador
   if (cashierMode === 'quick') {

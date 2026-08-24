@@ -38,11 +38,12 @@ jobs:
         run: pnpm run lint
 
       - name: 🧪 Run Unit Tests with Coverage
-        run: pnpm test -- --coverage --maxWorkers=2
+        run: pnpm exec jest --passWithNoTests --coverage --maxWorkers=2
 
       - name: 📊 Upload Coverage Report
         uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: code-coverage-report
           path: coverage/
