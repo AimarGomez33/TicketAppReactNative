@@ -1,5 +1,5 @@
 // src/components/QuantityModal.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { Product } from '../store/useCartStore';
 import { X, Plus, Minus, Check } from 'lucide-react-native';
@@ -33,6 +34,7 @@ export const QuantityModal: React.FC<Props> = ({
   onClose,
   onConfirm,
 }) => {
+  const scrollViewRef = useRef<ScrollView>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [notes, setNotes] = useState<string>('');
   const [customPriceStr, setCustomPriceStr] = useState<string>('');
@@ -40,6 +42,29 @@ export const QuantityModal: React.FC<Props> = ({
   const [customVariants, setCustomVariants] = useState<{ id: string; name: string }[]>([]);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [newVariantInput, setNewVariantInput] = useState<string>('');
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState<boolean>(false);
+  const [withComboPapas, setWithComboPapas] = useState<boolean>(false);
+  const [withExtraQueso, setWithExtraQueso] = useState<boolean>(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setIsKeyboardVisible(true);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setIsKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (visible && product) {
@@ -47,6 +72,8 @@ export const QuantityModal: React.FC<Props> = ({
       setNotes(currentNotes || '');
       setCustomPriceStr(product.price > 0 ? product.price.toString() : '');
       setCustomName(product.name || 'Extra Personalizado');
+      setWithComboPapas(false);
+      setWithExtraQueso(false);
       const baseVariants = product.variants ? [...product.variants] : [];
       setCustomVariants(baseVariants);
       setNewVariantInput('');
@@ -60,15 +87,28 @@ export const QuantityModal: React.FC<Props> = ({
 
   if (!product) return null;
 
+  const isBurgerOrWings = product.category === 'hamburguesas' || product.category === 'alitas';
+  const isTaco = product.category === 'tacos';
+
+  const comboExtra = withComboPapas ? 30 : 0;
+  const quesoExtra = withExtraQueso ? 12 : 0;
+
   const isCustomPriceMode = Boolean(product.isCustomPrice);
   const parsedCustomPrice = parseFloat(customPriceStr);
-  const effectivePrice = isCustomPriceMode
+  const basePrice = isCustomPriceMode
     ? isNaN(parsedCustomPrice) ? 0 : parsedCustomPrice
     : product.price;
+  const effectivePrice = basePrice + comboExtra + quesoExtra;
+
+  const getComboSuffix = () => {
+    if (withComboPapas) return ' + Papas';
+    if (withExtraQueso) return ' + Queso';
+    return '';
+  };
 
   const displayName = selectedVariant
-    ? `${product.name} (${selectedVariant})`
-    : (isCustomPriceMode ? (customName || 'Extra Personalizado') : product.name);
+    ? `${product.name} (${selectedVariant})${getComboSuffix()}`
+    : (isCustomPriceMode ? (customName || 'Extra Personalizado') : `${product.name}${getComboSuffix()}`);
 
   const handleQuickAdd = (amount: number) => {
     setQuantity(prev => prev + amount);
@@ -88,15 +128,18 @@ export const QuantityModal: React.FC<Props> = ({
   };
 
   const handleConfirm = () => {
+    const comboNote = withComboPapas ? 'Con Papas (150gr)' : (withExtraQueso ? 'Con Queso Fundido' : '');
+    const finalNotes = [notes.trim(), comboNote].filter(Boolean).join(' | ');
+
     const finalVariantName = selectedVariant
-      ? `${product.name} ${selectedVariant}`
+      ? `${product.name} ${selectedVariant}${getComboSuffix()}`
       : undefined;
 
     onConfirm(
       Math.max(1, quantity),
-      notes.trim(),
-      isCustomPriceMode ? effectivePrice : undefined,
-      finalVariantName || (isCustomPriceMode ? customName.trim() : undefined)
+      finalNotes,
+      (isCustomPriceMode || withComboPapas || withExtraQueso) ? effectivePrice : undefined,
+      finalVariantName || (isCustomPriceMode ? customName.trim() : (withComboPapas || withExtraQueso ? displayName : undefined))
     );
     onClose();
   };
@@ -109,10 +152,10 @@ export const QuantityModal: React.FC<Props> = ({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        style={styles.overlay}
+        style={[styles.overlay, isKeyboardVisible && styles.overlayKeyboardActive]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, isKeyboardVisible && styles.modalContainerKeyboardActive]}>
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTextContainer}>
@@ -129,9 +172,10 @@ export const QuantityModal: React.FC<Props> = ({
           </View>
 
           <ScrollView 
+            ref={scrollViewRef}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[styles.scrollContent, isKeyboardVisible && styles.scrollContentKeyboardActive]}
           >
             {/* Selector de Guisado / Variante / Sabor */}
             {(customVariants.length > 0 || product.category === 'bebidas' || product.category === 'quesadillas') && (
@@ -183,6 +227,64 @@ export const QuantityModal: React.FC<Props> = ({
                     <Text style={styles.addVariantBtnText}>+ Añadir</Text>
                   </TouchableOpacity>
                 </View>
+              </View>
+            )}
+
+            {/* Combo con Papas para Hamburguesas y Alitas */}
+            {isBurgerOrWings && (
+              <View style={styles.comboSection}>
+                <Text style={styles.sectionLabel}>COMBO CON PAPAS (150 GR)</Text>
+                <TouchableOpacity
+                  style={[styles.comboCard, withComboPapas && styles.comboCardActive]}
+                  onPress={() => setWithComboPapas(!withComboPapas)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.comboCardLeft}>
+                    <View style={[styles.comboCheckbox, withComboPapas && styles.comboCheckboxActive]}>
+                      {withComboPapas && <Check size={14} color="#FFF" />}
+                    </View>
+                    <View style={styles.comboTextCol}>
+                      <Text style={[styles.comboCardTitle, withComboPapas && styles.comboCardTitleActive]}>
+                        Combo con Papas
+                      </Text>
+                      <Text style={styles.comboCardSubtitle}>
+                        Papas a la francesa sazonadas (+ $30.00 c/u)
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.comboCardBadge, withComboPapas && styles.comboCardBadgeActive]}>
+                    +$30.00
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Extra Queso para Tacos */}
+            {isTaco && (
+              <View style={styles.comboSection}>
+                <Text style={styles.sectionLabel}>ADICIONAL</Text>
+                <TouchableOpacity
+                  style={[styles.comboCard, withExtraQueso && styles.comboCardActive]}
+                  onPress={() => setWithExtraQueso(!withExtraQueso)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.comboCardLeft}>
+                    <View style={[styles.comboCheckbox, withExtraQueso && styles.comboCheckboxActive]}>
+                      {withExtraQueso && <Check size={14} color="#FFF" />}
+                    </View>
+                    <View style={styles.comboTextCol}>
+                      <Text style={[styles.comboCardTitle, withExtraQueso && styles.comboCardTitleActive]}>
+                        Con Queso Fundido
+                      </Text>
+                      <Text style={styles.comboCardSubtitle}>
+                        Queso extra por taco (+ $12.00 c/u)
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.comboCardBadge, withExtraQueso && styles.comboCardBadgeActive]}>
+                    +$12.00
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
             {/* Input Especial de Precio Personalizado */}
@@ -297,6 +399,11 @@ export const QuantityModal: React.FC<Props> = ({
                 value={notes}
                 onChangeText={setNotes}
                 multiline
+                onFocus={() => {
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, 120);
+                }}
               />
             </View>
           </ScrollView>
@@ -328,8 +435,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  overlayKeyboardActive: {
+    justifyContent: 'flex-start',
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+  },
   scrollContent: {
     paddingBottom: 20,
+  },
+  scrollContentKeyboardActive: {
+    paddingBottom: 260,
   },
   modalContainer: {
     backgroundColor: '#ffffff',
@@ -343,6 +457,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 10,
+  },
+  modalContainerKeyboardActive: {
+    maxHeight: '82%',
   },
   header: {
     flexDirection: 'row',
@@ -488,6 +605,74 @@ const styles = StyleSheet.create({
   presetExactTextActive: {
     color: '#ffffff',
     fontWeight: 'bold',
+  },
+  comboSection: {
+    marginBottom: 16,
+  },
+  comboCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff0f3',
+    borderColor: '#ffe0ea',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: 12,
+  },
+  comboCardActive: {
+    backgroundColor: '#ffd9e5',
+    borderColor: '#b3006c',
+  },
+  comboCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  comboCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#b3006c',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  comboCheckboxActive: {
+    backgroundColor: '#b3006c',
+  },
+  comboTextCol: {
+    flex: 1,
+  },
+  comboCardTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#27171d',
+  },
+  comboCardTitleActive: {
+    color: '#b3006c',
+  },
+  comboCardSubtitle: {
+    fontSize: 11,
+    color: '#8e6e79',
+    marginTop: 2,
+  },
+  comboCardBadge: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#5a3f49',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffe0ea',
+  },
+  comboCardBadgeActive: {
+    color: '#ffffff',
+    backgroundColor: '#b3006c',
+    borderColor: '#b3006c',
   },
   notesSection: {
     marginBottom: 16,

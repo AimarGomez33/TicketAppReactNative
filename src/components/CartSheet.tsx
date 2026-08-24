@@ -55,8 +55,8 @@ export const CartSheet: React.FC = () => {
   const currentRound = getCurrentTableRound();
   const total = getTotal();
 
-  // Enviar comanda a cocina e imprimir
-  const handleSendToKitchen = async () => {
+  // Enviar comanda a cocina e imprimir (Instantáneo + Background Printer)
+  const handleSendToKitchen = () => {
     if (itemCount === 0) {
       showCustomAlert({
         type: 'info',
@@ -66,42 +66,33 @@ export const CartSheet: React.FC = () => {
       return;
     }
 
-    setIsPrinting(true);
-    try {
-      // Imprimir comanda de cocina con rondas
-      await printTicketTCP(tableNumber, items, total, {
-        isKitchenComanda: true,
-        showPrices: false,
-        currentRound,
-      });
+    // 1. Actualización de estado local instantánea (0ms)
+    const roundToPrint = currentRound;
+    const itemsSnapshot = [...items];
+    const totalSnapshot = total;
+    const tableSnapshot = tableNumber;
 
-      await sendRoundToKitchen(tableNumber);
+    sendRoundToKitchen(tableSnapshot);
+    setIsExpanded(false);
 
-      showCustomAlert({
-        type: 'printer',
-        title: `¡Comanda Enviada (Ronda #${currentRound})!`,
-        message: `Los platillos de la Mesa ${tableNumber || 'S/N'} se han enviado a cocina y el ticket de comanda se ha impreso.`,
-        confirmText: 'Entendido',
-        onConfirm: () => {
-          setIsExpanded(false);
-        },
-      });
-    } catch (error: any) {
-      // Si la impresora no responde, aún así guardamos la ronda
-      await sendRoundToKitchen(tableNumber);
-      showCustomAlert({
-        type: 'error',
-        title: 'Aviso de Impresora',
-        message: `La comanda se registró pero no se pudo imprimir (${error.message || '192.168.100.200'}).`,
-        confirmText: 'Aceptar',
-      });
-    } finally {
-      setIsPrinting(false);
-    }
+    showCustomAlert({
+      type: 'success',
+      title: `¡Comanda Enviada (Ronda #${roundToPrint})!`,
+      message: `Los platillos de la Mesa ${tableSnapshot || 'S/N'} se han enviado a cocina.`,
+    });
+
+    // 2. Impresión en segundo plano sin congelar la app
+    void printTicketTCP(tableSnapshot, itemsSnapshot, totalSnapshot, {
+      isKitchenComanda: true,
+      showPrices: false,
+      currentRound: roundToPrint,
+    }).catch((err) => {
+      console.warn('Aviso de impresora comanda:', err);
+    });
   };
 
-  // Mesero solicita la cuenta para que el cajero la cobre
-  const handleRequestBill = async () => {
+  // Mesero solicita la cuenta para que el cajero la cobre (Instantáneo)
+  const handleRequestBill = () => {
     if (itemCount === 0) {
       showCustomAlert({
         type: 'info',
@@ -111,16 +102,14 @@ export const CartSheet: React.FC = () => {
       return;
     }
 
-    await requestBillForTable(tableNumber);
+    const tableSnapshot = tableNumber;
+    requestBillForTable(tableSnapshot);
+    setIsExpanded(false);
+
     showCustomAlert({
       type: 'success',
-      title: '¡Cuenta Solicitada a Caja!',
-      message: `Se ha notificado al operador de Caja en tiempo real para el cobro de la Mesa ${tableNumber}.`,
-      confirmText: 'Volver a Mesas',
-      onConfirm: () => {
-        setIsExpanded(false);
-        setActiveTab('tables');
-      },
+      title: '¡Cuenta Solicitada!',
+      message: `Se notificó a Caja en tiempo real para el cobro de la Mesa ${tableSnapshot || 'S/N'}.`,
     });
   };
 

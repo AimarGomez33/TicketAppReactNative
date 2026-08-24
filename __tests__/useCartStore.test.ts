@@ -19,7 +19,7 @@ describe('useCartStore - Multi-Cocina y POS Tests', () => {
 
     // Agregar platillos combinados
     store.addQuantity(chalupa, 4); // 4 * $6 = $24
-    store.addQuantity(hamburguesa, 1); // 1 * $80 = $80
+    store.addQuantity(hamburguesa, 1); // 1 * $60 = $60
     store.addQuantity(taco, 2, 'con salsa verde'); // 2 * $35 = $70
 
     const updatedState = useCartStore.getState();
@@ -34,8 +34,8 @@ describe('useCartStore - Multi-Cocina y POS Tests', () => {
 
     expect(cocina2Items).toHaveLength(2);
 
-    // Validar Total Unificado para Caja: 24 + 80 + 70 = 174
-    expect(updatedState.getTotal()).toBe(174.0);
+    // Validar Total Unificado para Caja: 24 + 60 + 70 = 154
+    expect(updatedState.getTotal()).toBe(154.0);
   });
 
   test('Debe actualizar el estado de cocina de un platillo a en preparación y listo', () => {
@@ -110,22 +110,27 @@ describe('useCartStore - Multi-Cocina y POS Tests', () => {
     expect(stateFinal.ordersHistory[0].lastModified).toBeDefined();
   });
 
-  test('Debe incluir los nuevos pambazos con queso con su precio calculado (Base + $15)', () => {
+  test('Debe calcular correctamente Pambazos y Adicionales de Queso', () => {
     const store = useCartStore.getState();
-    const pambazoNatQueso = store.menuProducts.find(p => p.id === 'gen-pambazo-nat-queso')!;
-    const pambazoAdobQueso = store.menuProducts.find(p => p.id === 'gen-pambazo-adob-queso')!;
+    const pambazoNat = store.menuProducts.find(p => p.id === 'gen-pambazo-nat')!;
+    const pambazoAdob = store.menuProducts.find(p => p.id === 'gen-pambazo-adob')!;
+    const extraQueso = store.menuProducts.find(p => p.id === 'ext-queso-general')!;
 
-    expect(pambazoNatQueso).toBeDefined();
-    expect(pambazoNatQueso.price).toBe(53.0); // $38 + $15
+    expect(pambazoNat).toBeDefined();
+    expect(pambazoNat.price).toBe(38.0);
 
-    expect(pambazoAdobQueso).toBeDefined();
-    expect(pambazoAdobQueso.price).toBe(58.0); // $43 + $15
+    expect(pambazoAdob).toBeDefined();
+    expect(pambazoAdob.price).toBe(43.0);
 
-    // Agregar ambos
-    store.addQuantity(pambazoNatQueso, 1);
-    store.addQuantity(pambazoAdobQueso, 1);
+    expect(extraQueso).toBeDefined();
+    expect(extraQueso.price).toBe(15.0);
 
-    expect(useCartStore.getState().getTotal()).toBe(111.0); // 53 + 58
+    // Agregar ambos más extra queso
+    store.addQuantity(pambazoNat, 1); // 38
+    store.addQuantity(pambazoAdob, 1); // 43
+    store.addQuantity(extraQueso, 2); // 30 (2 * 15)
+
+    expect(useCartStore.getState().getTotal()).toBe(111.0); // 38 + 43 + 30
   });
 
   test('Debe permitir agregar Extra Personalizado con precio abierto y descripción', () => {

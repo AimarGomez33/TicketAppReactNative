@@ -7,7 +7,7 @@ import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 const PRINTER_CONFIG = {
   host: SUPABASE_CONFIG.printerHost,
   port: SUPABASE_CONFIG.printerPort,
-  timeout: 6000, // 6 segundos para redes Wi-Fi con jitter
+  timeout: 3000, // 3 segundos max para no congelar la UI
 };
 
 const ESC_POS = {
@@ -120,111 +120,105 @@ export const generateEscPosBuffer = (
       (it) => it.status === 'sent_to_kitchen' && it.round && it.round < currentRound
     );
 
-    addBytes(ESC_POS.ALIGN_LEFT);
-
-    // Sección 1: Nuevos Platillos a Preparar
-    addBytes(ESC_POS.TXT_BOLD_ON);
-    addText(`[!] A PREPARAR (Ronda ${currentRound}):\n`);
-    addBytes(ESC_POS.TXT_BOLD_OFF);
-    addText('--------------------------------\n');
-
-    const itemsToPrint = newItems.length > 0 ? newItems : targetItems;
-    itemsToPrint.forEach(({ product, quantity, notes }) => {
+    if (newItems.length > 0) {
       addBytes(ESC_POS.TXT_BOLD_ON);
-      addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
-      addText(` > ${quantity}x ${product.name}\n`);
-      addBytes(ESC_POS.TXT_NORMAL);
+      addText(`--- PLATILLOS A PREPARAR (Ronda #${currentRound}) ---\n`);
       addBytes(ESC_POS.TXT_BOLD_OFF);
-      if (notes && notes.trim().length > 0) {
-        addText(`    * NOTA: ${notes.trim()}\n`);
-      }
-      addText('\n');
-    });
+      addBytes(ESC_POS.ALIGN_LEFT);
 
-    // Sección 2: Platillos Anteriores ya enviados (Contexto para cocina)
-    if (previousItems.length > 0 && newItems.length > 0) {
-      addText('\n');
-      addBytes(ESC_POS.TXT_BOLD_ON);
-      addText('[v] YA ENVIADOS ANTERIORMENTE:\n');
-      addBytes(ESC_POS.TXT_BOLD_OFF);
-      addText('--------------------------------\n');
-      previousItems.forEach(({ product, quantity, notes, round }) => {
-        addText(` - (${quantity}x) ${product.name} [Ronda ${round || 1}]\n`);
-        if (notes && notes.trim().length > 0) {
-          addText(`    * ${notes.trim()}\n`);
+      newItems.forEach((it) => {
+        addBytes(ESC_POS.TXT_BOLD_ON);
+        addText(`[ ] ${it.quantity}x ${it.product.name}\n`);
+        addBytes(ESC_POS.TXT_BOLD_OFF);
+        if (it.notes && it.notes.trim().length > 0) {
+          addText(`    * NOTA: ${it.notes.trim()}\n`);
         }
       });
+      addText('\n');
+    }
+
+    if (previousItems.length > 0) {
+      addBytes(ESC_POS.ALIGN_CENTER);
+      addText('--- RONDAS ANTERIORES (YA ENVIADAS) ---\n');
+      addBytes(ESC_POS.ALIGN_LEFT);
+      previousItems.forEach((it) => {
+        addText(`  (R#${it.round || 1}) ${it.quantity}x ${it.product.name} ${it.notes ? `(${it.notes})` : ''}\n`);
+      });
+      addText('\n');
     }
 
     addBytes(ESC_POS.ALIGN_CENTER);
-    addText('\n================================\n');
-    const totalQty = targetItems.reduce((sum, it) => sum + it.quantity, 0);
-    addBytes(ESC_POS.TXT_BOLD_ON);
-    addText(`Total en esta comanda: ${totalQty} articulos\n`);
-    addBytes(ESC_POS.TXT_BOLD_OFF);
-    addText('Comanda lista para preparar!\n\n\n');
-  } else {
-    // Ticket de Cobro / Cliente / Mostrador
-    if (options?.isReprint) {
-      addBytes(ESC_POS.TXT_BOLD_ON);
-      addText('*** REIMPRESION DE TICKET ***\n');
-      addBytes(ESC_POS.TXT_BOLD_OFF);
-    }
-    addBytes(ESC_POS.TXT_BOLD_ON);
-    const isTakeout =
-      !tableNumber ||
-      tableNumber.toLowerCase() === 'llevar' ||
-      tableNumber.toLowerCase() === 'para llevar' ||
-      tableNumber.toLowerCase() === 'mostrador';
-
-    const titleHeader = isTakeout
-      ? 'PEDIDO: PARA LLEVAR'
-      : `CONSUMO: MESA ${tableNumber.toUpperCase()}`;
-    addText(`${titleHeader}\n`);
-    addBytes(ESC_POS.TXT_BOLD_OFF);
-    addText(`Fecha: ${new Date().toLocaleString()}\n`);
-    addText('--------------------------------\n');
-
-    addBytes(ESC_POS.ALIGN_LEFT);
-    items.forEach(({ product, quantity, notes }) => {
-      const itemSubtotal = (product.price * quantity).toFixed(2);
-      addBytes(ESC_POS.TXT_BOLD_ON);
-      addText(`${quantity}x ${product.name}\n`);
-      addBytes(ESC_POS.TXT_BOLD_OFF);
-      if (notes && notes.trim().length > 0) {
-        addText(`   * Nota: ${notes.trim()}\n`);
-      }
-      addText(`   $${product.price.toFixed(2)} c/u  -->  $${itemSubtotal}\n`);
-    });
-
-    addBytes(ESC_POS.ALIGN_CENTER);
-    addText('--------------------------------\n');
-    addBytes(ESC_POS.TXT_BOLD_ON);
-    addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
-    addText(`TOTAL A PAGAR: $${total.toFixed(2)}\n`);
-    addBytes(ESC_POS.TXT_NORMAL);
-    addBytes(ESC_POS.TXT_BOLD_OFF);
-
-    if (options?.paymentMethod) {
-      const methodLabel =
-        options.paymentMethod === 'cash'
-          ? 'EFECTIVO'
-          : options.paymentMethod === 'card'
-          ? 'TARJETA'
-          : 'TRANSFERENCIA';
-      addText(`Metodo de Pago: ${methodLabel}\n`);
-    }
-
-    addText('--------------------------------\n');
-    addText('Muchas gracias por su preferencia!\n\n\n');
+    addText('================================\n\n\n');
+    addBytes(ESC_POS.CUT_PAPER);
+    return new Uint8Array(bytes);
   }
 
+  // --- TICKET DE CUENTA / CLIENTE ---
+  addBytes(ESC_POS.ALIGN_CENTER);
+  if (options?.isReprint) {
+    addBytes(ESC_POS.TXT_BOLD_ON);
+    addText('*** REIMPRESION DE TICKET ***\n');
+    addBytes(ESC_POS.TXT_BOLD_OFF);
+  }
+  addText(`MESA / ORDEN: ${tableNumber ? tableNumber.toUpperCase() : 'MOSTRADOR'}\n`);
+  if (options?.orderId) {
+    addText(`Folio: #${options.orderId.slice(-6).toUpperCase()}\n`);
+  }
+  addText(`Fecha: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`);
+  addText('================================\n');
+
+  addBytes(ESC_POS.ALIGN_LEFT);
+  addBytes(ESC_POS.TXT_BOLD_ON);
+  addText('CANT  DESCRIPCION         TOTAL\n');
+  addBytes(ESC_POS.TXT_BOLD_OFF);
+  addText('--------------------------------\n');
+
+  targetItems.forEach((it) => {
+    const qtyStr = it.quantity.toString().padEnd(4, ' ');
+    const lineTotal = (it.product.price * it.quantity).toFixed(2);
+    const lineTotalStr = `$${lineTotal}`.padStart(9, ' ');
+    const nameMaxLen = 32 - 4 - 9;
+    const nameTruncated = it.product.name.slice(0, nameMaxLen).padEnd(nameMaxLen, ' ');
+
+    addText(`${qtyStr}${nameTruncated}${lineTotalStr}\n`);
+    if (it.notes && it.notes.trim().length > 0) {
+      addText(`   * ${it.notes.trim()}\n`);
+    }
+  });
+
+  addText('--------------------------------\n');
+  addBytes(ESC_POS.ALIGN_RIGHT);
+  addBytes(ESC_POS.TXT_BOLD_ON);
+  addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
+  addText(`TOTAL: $${total.toFixed(2)}\n`);
+  addBytes(ESC_POS.TXT_NORMAL);
+  addBytes(ESC_POS.TXT_BOLD_OFF);
+
+  if (options?.paymentMethod) {
+    addBytes(ESC_POS.ALIGN_LEFT);
+    const methodStr =
+      options.paymentMethod === 'cash'
+        ? 'Efectivo'
+        : options.paymentMethod === 'card'
+        ? 'Tarjeta'
+        : 'Transferencia';
+    addText(`Metodo de Pago: ${methodStr}\n`);
+    if (options.amountPaid && options.amountPaid > 0) {
+      addText(`Recibido: $${options.amountPaid.toFixed(2)}\n`);
+      addText(`Cambio:   $${(options.change || 0).toFixed(2)}\n`);
+    }
+  }
+
+  addBytes(ESC_POS.ALIGN_CENTER);
+  addText('\n¡Gracias por su preferencia!\n');
+  addText('================================\n\n\n');
   addBytes(ESC_POS.CUT_PAPER);
+
   return new Uint8Array(bytes);
 };
 
 /**
- * Ejecuta una impresión directa con socket TCP y gestión de ciclo de vida seguro
+ * Transmisión Socket TCP a la impresora (Ejecución individual limpia sin duplicados)
  */
 const executeSocketTransmission = (
   payload: Uint8Array,
@@ -232,9 +226,9 @@ const executeSocketTransmission = (
   port: number,
 ): Promise<boolean> => {
   return new Promise((resolve, reject) => {
+    let client: any = null;
     let isFinished = false;
     let dataSent = false;
-    let client: any = null;
 
     const cleanup = () => {
       if (client) {
@@ -251,7 +245,7 @@ const executeSocketTransmission = (
         try {
           const buffer = Buffer.from(payload);
           client.write(buffer, (err?: any) => {
-            if (err && !dataSent) {
+            if (err) {
               if (!isFinished) {
                 isFinished = true;
                 cleanup();
@@ -261,14 +255,14 @@ const executeSocketTransmission = (
             }
 
             dataSent = true;
-            // Espera de 250ms para que la impresora procese el corte de papel antes de cerrar
+            // 200ms para corte de papel y finalización
             setTimeout(() => {
               if (!isFinished) {
                 isFinished = true;
                 cleanup();
                 resolve(true);
               }
-            }, 250);
+            }, 200);
           });
         } catch (err) {
           if (!isFinished) {
@@ -288,20 +282,18 @@ const executeSocketTransmission = (
           if (dataSent) {
             resolve(true);
           } else {
-            reject(new Error(`Timeout (${PRINTER_CONFIG.timeout}ms): Impresora en ${host}:${port} no respondió.`));
+            reject(new Error(`Timeout: Impresora en ${host}:${port} no respondió.`));
           }
         }
       });
 
       client.on('error', (error: any) => {
         if (!isFinished) {
+          isFinished = true;
+          cleanup();
           if (dataSent) {
-            isFinished = true;
-            cleanup();
             resolve(true);
           } else {
-            isFinished = true;
-            cleanup();
             reject(error);
           }
         }
@@ -322,9 +314,11 @@ const executeSocketTransmission = (
 };
 
 /**
- * Cola de impresión serializada con reintento automático
+ * Deduplicador estricto para evitar imprimir 2 o 3 veces el mismo ticket
  */
-let printQueueChain = Promise.resolve(true);
+let lastPrintFingerprint = '';
+let lastPrintTimestamp = 0;
+let isPrintLocked = false;
 
 export const printTicketTCP = async (
   tableNumber: string,
@@ -334,26 +328,34 @@ export const printTicketTCP = async (
   customHost?: string,
   customPort?: number,
 ): Promise<boolean> => {
+  const currentFingerprint = `${tableNumber}_${total}_${items.length}_${options?.isKitchenComanda ? 'kitchen' : 'bill'}_${options?.currentRound || 1}`;
+  const now = Date.now();
+
+  // Si se envió EXACTAMENTE el mismo ticket hace menos de 2.5 segundos, descartar duplicado
+  if (currentFingerprint === lastPrintFingerprint && now - lastPrintTimestamp < 2500) {
+    console.log('🛡️ Descartando impresión duplicada prevenida por deduplicador.');
+    return true;
+  }
+
+  if (isPrintLocked) {
+    console.log('🛡️ Impresión en progreso, evitando colisión de socket.');
+    return true;
+  }
+
+  isPrintLocked = true;
+  lastPrintFingerprint = currentFingerprint;
+  lastPrintTimestamp = now;
+
   const payload = generateEscPosBuffer(tableNumber, items, total, options);
   const host = customHost || PRINTER_CONFIG.host;
   const port = customPort || PRINTER_CONFIG.port;
 
-  const runWithRetry = async (): Promise<boolean> => {
-    try {
-      return await executeSocketTransmission(payload, host, port);
-    } catch (firstErr) {
-      console.warn('Primer intento de impresion fallo, reintentando en 350ms...', firstErr);
-      await new Promise<void>((res) => setTimeout(() => res(), 350));
-      return await executeSocketTransmission(payload, host, port);
-    }
-  };
-
-  printQueueChain = printQueueChain
-    .then(runWithRetry)
-    .catch(runWithRetry)
-    .then(
-      (res) => new Promise<boolean>((resolve) => setTimeout(() => resolve(res), 200))
-    );
-
-  return printQueueChain;
+  try {
+    const result = await executeSocketTransmission(payload, host, port);
+    isPrintLocked = false;
+    return result;
+  } catch (err) {
+    isPrintLocked = false;
+    throw err;
+  }
 };

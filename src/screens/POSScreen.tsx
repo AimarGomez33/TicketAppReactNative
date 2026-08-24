@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   listPadding: {
-    paddingBottom: 100, // Espacio para no tapar productos con el CartSheet flotante
+    paddingBottom: 160, // Espacio amplio para que nunca se tape la última fila con el CartSheet flotante
   },
   emptyContainer: {
     padding: 40,

@@ -36,9 +36,7 @@ export const CATEGORIES_GENERAL: Category[] = [
 
 export const CATEGORIES: Category[] = CATEGORIES_GENERAL;
 
-// ==========================================
-// MENÚ GENERAL (Para captura rápida en punto de venta)
-// ==========================================
+
 export const MOCK_PRODUCTS_GENERAL: Product[] = [
   // --- 🇲🇽 COCINA 1: ANTOJITOS ---
   {
@@ -47,7 +45,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 6.0,
     category: 'antojitos',
     kitchenStation: 'mexican',
-    description: 'Tortillita de maíz, papa, salsa, lechuga, queso rallado y pollo',
+    description: 'Tortillita de maíz, papa, salsa, lechuga, queso rallado y pollo ($6 por pieza)',
   },
   {
     id: 'gen-mollejas',
@@ -55,7 +53,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 25.0,
     category: 'antojitos',
     kitchenStation: 'mexican',
-    description: '2 tortillas maíz, 3 mollejas de pollo, salsa, lechuga, queso rallado',
+    description: '2 tortillitas de maíz, 3 mollejas de pollo, salsa, lechuga, queso rallado',
   },
   {
     id: 'gen-patitas',
@@ -63,7 +61,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 25.0,
     category: 'antojitos',
     kitchenStation: 'mexican',
-    description: '2 tortillas maíz, 3 patitas de pollo, salsa, lechuga, queso rallado',
+    description: '2 tortillitas de maíz, 3 patitas de pollo, salsa, lechuga, queso rallado',
   },
   {
     id: 'gen-higados',
@@ -71,7 +69,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 25.0,
     category: 'antojitos',
     kitchenStation: 'mexican',
-    description: '2 tortillas maíz, 3 hígados de pollo, salsa, lechuga, queso rallado',
+    description: '2 tortillitas de maíz, 3 hígados de pollo, salsa, lechuga, queso rallado',
   },
   {
     id: 'gen-huevo',
@@ -79,7 +77,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 22.0,
     category: 'antojitos',
     kitchenStation: 'mexican',
-    description: '2 tortillas maíz, 1 huevo, salsa, lechuga, queso rallado',
+    description: '2 tortillitas de maíz, 1 huevo, salsa, lechuga, queso rallado',
   },
   {
     id: 'gen-alon',
@@ -87,19 +85,18 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 25.0,
     category: 'antojitos',
     kitchenStation: 'mexican',
-    description: '2 tortillas maíz, 1 alita de pollo, salsa, lechuga, queso rallado',
+    description: '2 tortillitas de maíz, 1 alita de pollo, salsa, lechuga, queso rallado',
   },
 
-  // --- 🇲🇽 COCINA 1: QUESADILLAS ($33 c/u) ---
+  // --- 🇲🇽 COCINA 1: QUESADILLAS ($33 c/u - Con o Sin Queso, Aprox. 25 cm) ---
   {
     id: 'gen-quesadilla',
-    name: 'Quesadilla',
+    name: 'Quesadilla (Aprox. 25 cm)',
     price: 33.0,
     category: 'quesadillas',
     kitchenStation: 'mexican',
-    description: 'Elige el guisado o queso fundido',
+    description: 'Con o sin queso. Elige el guisado o solo queso',
     variants: [
-      { id: 'v-q-queso', name: 'Queso' },
       { id: 'v-q-tinga', name: 'Tinga de Pollo' },
       { id: 'v-q-bistec', name: 'Bistec' },
       { id: 'v-q-huitla', name: 'Huitlacoche' },
@@ -114,15 +111,8 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
       { id: 'v-q-pollo', name: 'Pollo' },
       { id: 'v-q-bistec-nopales', name: 'Bistec con Nopales' },
       { id: 'v-q-papa-chorizo', name: 'Papa con Chorizo' },
+      { id: 'v-q-solo-queso', name: 'Solo Queso' },
     ],
-  },
-  {
-    id: 'gen-quesadilla-queso',
-    name: 'Quesadilla de Queso',
-    price: 33.0,
-    category: 'quesadillas',
-    kitchenStation: 'mexican',
-    description: 'Tortilla de maíz rellena de abundante queso Oaxaca fundido',
   },
 
   // --- 🇲🇽 COCINA 1: TOSTADAS ($37 c/u) ---
@@ -132,7 +122,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 37.0,
     category: 'tostadas',
     kitchenStation: 'mexican',
-    description: 'Tostada de maíz con crema, lechuga, queso rallado y guisado',
+    description: 'Tostada de maíz, crema, guisado a elegir, lechuga, queso rallado',
     variants: [
       { id: 'v-tost-pata', name: 'Pata de Res' },
       { id: 'v-tost-tinga', name: 'Tinga de Pollo' },
@@ -153,7 +143,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 65.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
-    description: 'Pambazo con 2 chalupas, pollo, huevo, chorizo, salsa, lechuga y queso',
+    description: 'Pambazo relleno con dos chalupas, pollo, huevo, chorizo, salsa, lechuga y queso rallado',
   },
   {
     id: 'gen-guajoloyet-adob',
@@ -161,7 +151,7 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 70.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
-    description: 'Pambazo adobado con 2 chalupas, pollo, huevo, chorizo, salsa, lechuga y queso',
+    description: 'Pambazo relleno con dos chalupas, pollo, huevo, chorizo, salsa, lechuga y queso rallado',
   },
 
   // --- 🇲🇽 COCINA 1: POZOLE ---
@@ -171,11 +161,11 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 100.0,
     category: 'pozole',
     kitchenStation: 'mexican',
-    description: 'Pollo, puerco o combinado. Incluye tostadas y guarnición',
+    description: 'Pollo, puerco o combinado. Guarnición: tostadas, lechuga, cebolla, rábano, limón, orégano, chile triturado',
     variants: [
       { id: 'v-poz-pollo', name: 'Pollo' },
       { id: 'v-poz-puerco', name: 'Puerco' },
-      { id: 'v-poz-mixto', name: 'Mixto / Combinado' },
+      { id: 'v-poz-mixto', name: 'Combinado (Pollo y Puerco)' },
     ],
   },
   {
@@ -184,102 +174,87 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 120.0,
     category: 'pozole',
     kitchenStation: 'mexican',
-    description: 'Pollo, puerco o combinado. Incluye tostadas y guarnición',
+    description: 'Pollo, puerco o combinado. Guarnición: tostadas, lechuga, cebolla, rábano, limón, orégano, chile triturado',
     variants: [
       { id: 'v-poz-pollo', name: 'Pollo' },
       { id: 'v-poz-puerco', name: 'Puerco' },
-      { id: 'v-poz-mixto', name: 'Mixto / Combinado' },
+      { id: 'v-poz-mixto', name: 'Combinado (Pollo y Puerco)' },
     ],
   },
 
-  // --- 🇲🇽 COCINA 1: PAMBAZOS ---
+  // --- 🇲🇽 COCINA 1: PAMBAZOS (Papa, salsa, lechuga, queso rallado. Queso extra $15) ---
   {
     id: 'gen-pambazo-nat',
-    name: 'Pambazo Natural',
+    name: 'Pambazo Natural (1 Guisado)',
     price: 38.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
-    description: 'Papa, salsa, lechuga, queso rallado y 1 guisado',
+    description: 'Papa, salsa, lechuga, queso rallado y 1 guisado a elegir',
     variants: [
+      { id: 'v-pam-pollo', name: 'Pollo' },
       { id: 'v-pam-papa-ch', name: 'Papa con Chorizo' },
       { id: 'v-pam-tinga', name: 'Tinga de Pollo' },
       { id: 'v-pam-bistec', name: 'Bistec' },
+      { id: 'v-pam-huitla', name: 'Huitlacoche' },
+      { id: 'v-pam-chich', name: 'Chicharrón' },
+      { id: 'v-pam-huevo', name: 'Huevo' },
+      { id: 'v-pam-molleja', name: 'Molleja' },
       { id: 'v-pam-picadillo', name: 'Picadillo' },
-      { id: 'v-pam-pollo', name: 'Pollo' },
-    ],
-  },
-  {
-    id: 'gen-pambazo-nat-queso',
-    name: 'Pambazo Natural con Queso',
-    price: 53.0,
-    category: 'pambazos',
-    kitchenStation: 'mexican',
-    description: 'Pambazo natural + Queso Oaxaca fundido ($38 + $15)',
-    variants: [
-      { id: 'v-pam-papa-ch', name: 'Papa con Chorizo' },
-      { id: 'v-pam-tinga', name: 'Tinga de Pollo' },
-      { id: 'v-pam-bistec', name: 'Bistec' },
-      { id: 'v-pam-picadillo', name: 'Picadillo' },
-      { id: 'v-pam-pollo', name: 'Pollo' },
+      { id: 'v-pam-mole-v', name: 'Mole Verde' },
+      { id: 'v-pam-panza', name: 'Panza' },
+      { id: 'v-pam-champ', name: 'Champiñones' },
+      { id: 'v-pam-bistec-nop', name: 'Bistec con Nopales' },
     ],
   },
   {
     id: 'gen-pambazo-adob',
-    name: 'Pambazo Adobado',
+    name: 'Pambazo Adobado (1 Guisado)',
     price: 43.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
-    description: 'Papa, salsa, lechuga, queso rallado y 1 guisado',
+    description: 'Papa, salsa, lechuga, queso rallado y 1 guisado a elegir',
     variants: [
+      { id: 'v-pam-pollo', name: 'Pollo' },
       { id: 'v-pam-papa-ch', name: 'Papa con Chorizo' },
       { id: 'v-pam-tinga', name: 'Tinga de Pollo' },
       { id: 'v-pam-bistec', name: 'Bistec' },
+      { id: 'v-pam-huitla', name: 'Huitlacoche' },
+      { id: 'v-pam-chich', name: 'Chicharrón' },
+      { id: 'v-pam-huevo', name: 'Huevo' },
+      { id: 'v-pam-molleja', name: 'Molleja' },
       { id: 'v-pam-picadillo', name: 'Picadillo' },
-      { id: 'v-pam-pollo', name: 'Pollo' },
-    ],
-  },
-  {
-    id: 'gen-pambazo-adob-queso',
-    name: 'Pambazo Adobado con Queso',
-    price: 58.0,
-    category: 'pambazos',
-    kitchenStation: 'mexican',
-    description: 'Pambazo adobado + Queso Oaxaca fundido ($43 + $15)',
-    variants: [
-      { id: 'v-pam-papa-ch', name: 'Papa con Chorizo' },
-      { id: 'v-pam-tinga', name: 'Tinga de Pollo' },
-      { id: 'v-pam-bistec', name: 'Bistec' },
-      { id: 'v-pam-picadillo', name: 'Picadillo' },
-      { id: 'v-pam-pollo', name: 'Pollo' },
+      { id: 'v-pam-mole-v', name: 'Mole Verde' },
+      { id: 'v-pam-panza', name: 'Panza' },
+      { id: 'v-pam-champ', name: 'Champiñones' },
+      { id: 'v-pam-bistec-nop', name: 'Bistec con Nopales' },
     ],
   },
   {
     id: 'gen-pambazo-nat-comb',
-    name: 'Pambazo Natural Combinado',
+    name: 'Pambazo Natural Combinado (2 Guisados)',
     price: 45.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
-    description: 'Papa, salsa, lechuga, queso rallado y 2 guisados',
+    description: 'Papa, salsa, lechuga, queso rallado y 2 guisados a elegir',
   },
   {
     id: 'gen-pambazo-adob-comb',
-    name: 'Pambazo Adobado Combinado',
+    name: 'Pambazo Adobado Combinado (2 Guisados)',
     price: 50.0,
     category: 'pambazos',
     kitchenStation: 'mexican',
-    description: 'Papa, salsa, lechuga, queso rallado y 2 guisados',
+    description: 'Papa, salsa, lechuga, queso rallado y 2 guisados a elegir',
   },
 
   // --- 🇲🇽 COCINA 1: GUAJOLOTA / VOLCÁN ---
   {
     id: 'gen-guajolota',
-    name: 'Guajolota / Volcán',
+    name: 'Guajolota (Volcán) (1 Guisado)',
     price: 60.0,
     category: 'guajolotas',
     kitchenStation: 'mexican',
-    description: 'Guisado, salsa, lechuga, queso rallado y queso Oaxaca',
+    description: 'Tortilla de maíz estilo huarache de aprox 25 cm, guisado, salsa, lechuga, queso rallado y queso Oaxaca',
     variants: [
-      { id: 'v-gj-queso', name: 'Queso' },
       { id: 'v-gj-pollo', name: 'Pollo' },
       { id: 'v-gj-papa-ch', name: 'Papa con Chorizo' },
       { id: 'v-gj-tinga', name: 'Tinga de Pollo' },
@@ -297,46 +272,38 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     ],
   },
 
-  // --- 🇺🇸 🌮 COCINA 2: HAMBURGUESAS ---
+  // --- 🇺🇸 🌮 COCINA 2: HAMBURGUESAS (Con papas 150gr + $30) ---
   {
     id: 'gen-burg-americana',
     name: 'Hamburguesa Americana',
-    price: 80.0,
+    price: 60.0,
     category: 'hamburguesas',
     kitchenStation: 'american_tacos',
-    description: 'Carne de res, queso americano, jitomate, cebolla, lechuga, pepinillos, cátsup, mayonesa',
-  },
-  {
-    id: 'gen-burg-hawaiana',
-    name: 'Hamburguesa Hawaiana',
-    price: 90.0,
-    category: 'hamburguesas',
-    kitchenStation: 'american_tacos',
-    description: 'Carne de res, queso americano, jamón, piña, jitomate, cebolla, lechuga, pepinillos',
-  },
-  {
-    id: 'gen-burg-doble',
-    name: 'Hamburguesa Doble Carne',
-    price: 100.0,
-    category: 'hamburguesas',
-    kitchenStation: 'american_tacos',
-    description: 'Doble carne de res, doble queso americano, jitomate, cebolla, lechuga, pepinillos',
+    description: 'Carne, queso americano, aderezo de la casa, cebolla, pepinillos',
   },
   {
     id: 'gen-burg-especial',
-    name: 'Hamburguesa Especial de la Casa',
+    name: 'Hamburguesa Especial',
+    price: 90.0,
+    category: 'hamburguesas',
+    kitchenStation: 'american_tacos',
+    description: 'Carne, tocino, queso Oaxaca, queso americano, aderezo de la casa, lechuga, cebolla, pepinillos',
+  },
+  {
+    id: 'gen-burg-suiza',
+    name: 'Hamburguesa Suiza',
+    price: 90.0,
+    category: 'hamburguesas',
+    kitchenStation: 'american_tacos',
+    description: 'Carne, queso Oaxaca, queso americano, queso manchego, aderezo de la casa, lechuga, cebolla, pepinillos',
+  },
+  {
+    id: 'gen-burg-texana',
+    name: 'Hamburguesa Texana',
     price: 110.0,
     category: 'hamburguesas',
     kitchenStation: 'american_tacos',
-    description: 'Carne de res, queso americano, queso manchego, tocino, jamón, piña, jitomate, cebolla, lechuga',
-  },
-  {
-    id: 'gen-burg-tocino-bbq',
-    name: 'Hamburguesa Tocino BBQ',
-    price: 105.0,
-    category: 'hamburguesas',
-    kitchenStation: 'american_tacos',
-    description: 'Carne, queso manchego, tocino, aros de cebolla, salsa BBQ, aderezo, lechuga',
+    description: 'Carne, queso manchego, tocino, aros de cebolla, salsa BBQ, aderezo de la casa, lechuga, cebolla, pepinillos',
   },
   {
     id: 'gen-burg-pollo-bbq',
@@ -344,22 +311,22 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 105.0,
     category: 'hamburguesas',
     kitchenStation: 'american_tacos',
-    description: 'Pollo crují, queso manchego, tocino, salsa BBQ, aderezo, lechuga, cebolla, pepinillos',
+    description: 'Pollo crují, queso manchego, tocino, salsa BBQ, aderezo de la casa, lechuga, cebolla, pepinillos',
   },
 
-  // --- 🇺🇸 🌮 COCINA 2: ALITAS ---
+  // --- 🇺🇸 🌮 COCINA 2: ALITAS (Con papas 150gr + $30) ---
   {
     id: 'gen-alitas-6',
     name: 'Alitas (Orden de 6)',
     price: 80.0,
     category: 'alitas',
     kitchenStation: 'american_tacos',
-    description: 'Salsas: BBQ, BBQ Picante, Búfalo, Mango-Habanero, Lemon Pepper, Ajo Parmesano',
+    description: 'Salsas a elegir: BBQ, BBQ Picante, Búfalo, Mango - Habanero, Lemon Pepper, Ajo Parmesano',
     variants: [
       { id: 'v-al-bbq', name: 'BBQ' },
       { id: 'v-al-bbq-pic', name: 'BBQ Picante' },
       { id: 'v-al-bufalo', name: 'Búfalo' },
-      { id: 'v-al-mango', name: 'Mango-Habanero' },
+      { id: 'v-al-mango', name: 'Mango - Habanero' },
       { id: 'v-al-lemon', name: 'Lemon Pepper' },
       { id: 'v-al-parm', name: 'Ajo Parmesano' },
     ],
@@ -370,25 +337,25 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 140.0,
     category: 'alitas',
     kitchenStation: 'american_tacos',
-    description: 'Salsas: BBQ, BBQ Picante, Búfalo, Mango-Habanero, Lemon Pepper, Ajo Parmesano',
+    description: 'Salsas a elegir: BBQ, BBQ Picante, Búfalo, Mango - Habanero, Lemon Pepper, Ajo Parmesano',
     variants: [
       { id: 'v-al-bbq', name: 'BBQ' },
       { id: 'v-al-bbq-pic', name: 'BBQ Picante' },
       { id: 'v-al-bufalo', name: 'Búfalo' },
-      { id: 'v-al-mango', name: 'Mango-Habanero' },
+      { id: 'v-al-mango', name: 'Mango - Habanero' },
       { id: 'v-al-lemon', name: 'Lemon Pepper' },
       { id: 'v-al-parm', name: 'Ajo Parmesano' },
     ],
   },
 
-  // --- 🇺🇸 🌮 COCINA 2: TACOS ($35 c/u) ---
+  // --- 🇺🇸 🌮 COCINA 2: TACOS ($35 c/u - Con queso + $12) ---
   {
     id: 'gen-taco',
     name: 'Taco (Pieza)',
     price: 35.0,
     category: 'tacos',
     kitchenStation: 'american_tacos',
-    description: 'Harina o maíz, nopales y perejil frito',
+    description: 'Tortilla de harina o de maíz, nopales y perejil frito',
     variants: [
       { id: 'v-tac-arrachera', name: 'Arrachera' },
       { id: 'v-tac-costilla', name: 'Costilla' },
@@ -416,12 +383,14 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 130.0,
     category: 'papas',
     kitchenStation: 'american_tacos',
-    description: 'Papas con trozos de boneless (1 salsa a elegir)',
+    description: 'Papas con trozos de boneless (una salsa a elegir)',
     variants: [
-      { id: 'v-bon-bbq', name: 'Salsa BBQ' },
-      { id: 'v-bon-bufalo', name: 'Salsa Búfalo' },
-      { id: 'v-bon-mango', name: 'Salsa Mango-Habanero' },
+      { id: 'v-bon-bbq', name: 'BBQ' },
+      { id: 'v-bon-bbq-pic', name: 'BBQ Picante' },
+      { id: 'v-bon-bufalo', name: 'Búfalo' },
+      { id: 'v-bon-mango', name: 'Mango - Habanero' },
       { id: 'v-bon-lemon', name: 'Lemon Pepper' },
+      { id: 'v-bon-parm', name: 'Ajo Parmesano' },
     ],
   },
   {
@@ -436,23 +405,23 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
   // --- 🇲🇽 BEBIDAS ---
   {
     id: 'gen-refresco',
-    name: 'Refresco (Lata / Botella)',
+    name: 'Refresco',
     price: 28.0,
     category: 'bebidas',
     kitchenStation: 'mexican',
-    description: 'Elige tu sabor o agrega uno personalizado',
+    description: 'Coca-Cola, Sangría casera, Manzanita sol, Squirt, 7up, Mirinda, Sprite, Sidral Mundet, Delaware Punch, Fanta, Boing',
     variants: [
       { id: 'v-ref-coca', name: 'Coca-Cola' },
-      { id: 'v-ref-sprite', name: 'Sprite' },
-      { id: 'v-ref-manzanita', name: 'Manzanita' },
+      { id: 'v-ref-sangria', name: 'Sangría Casera' },
+      { id: 'v-ref-manzanita', name: 'Manzanita Sol' },
       { id: 'v-ref-squirt', name: 'Squirt' },
-      { id: 'v-ref-sangria', name: 'Sangría' },
-      { id: 'v-ref-fanta', name: 'Fanta' },
       { id: 'v-ref-7up', name: '7up' },
-      { id: 'v-ref-sidral', name: 'Sidral' },
-      { id: 'v-ref-coca-zero', name: 'Coca Zero' },
-      { id: 'v-ref-boing-mango', name: 'Boing Mango' },
-      { id: 'v-ref-boing-guayaba', name: 'Boing Guayaba' },
+      { id: 'v-ref-mirinda', name: 'Mirinda' },
+      { id: 'v-ref-sprite', name: 'Sprite' },
+      { id: 'v-ref-sidral', name: 'Sidral Mundet' },
+      { id: 'v-ref-delaware', name: 'Delaware Punch' },
+      { id: 'v-ref-fanta', name: 'Fanta' },
+      { id: 'v-ref-boing', name: 'Boing' },
     ],
   },
   {
@@ -461,45 +430,15 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     price: 26.0,
     category: 'bebidas',
     kitchenStation: 'mexican',
-    description: 'Aguas frescas naturales del día',
+    description: 'Horchata, Nuez, Jamaica, Limón con chía, Mojito, Jamaica sin azúcar',
     variants: [
-      { id: 'v-ag-limon', name: 'Agua de Limón' },
       { id: 'v-ag-horchata', name: 'Horchata' },
-      { id: 'v-ag-jamaica', name: 'Jamaica' },
       { id: 'v-ag-nuez', name: 'Nuez' },
+      { id: 'v-ag-jamaica', name: 'Jamaica' },
       { id: 'v-ag-limon-chia', name: 'Limón con Chía' },
-      { id: 'v-ag-tamarindo', name: 'Tamarindo' },
       { id: 'v-ag-mojito', name: 'Mojito' },
-      { id: 'v-ag-maracuya', name: 'Maracuyá' },
       { id: 'v-ag-jamaica-sin', name: 'Jamaica sin Azúcar' },
     ],
-  },
-  {
-    id: 'gen-agua-1000',
-    name: 'Agua de Sabor (1 Litro)',
-    price: 45.0,
-    category: 'bebidas',
-    kitchenStation: 'mexican',
-    description: 'Jarra / Litro de agua fresca del día',
-    variants: [
-      { id: 'v-ag1-limon', name: 'Agua de Limón' },
-      { id: 'v-ag1-horchata', name: 'Horchata' },
-      { id: 'v-ag1-jamaica', name: 'Jamaica' },
-      { id: 'v-ag1-nuez', name: 'Nuez' },
-      { id: 'v-ag1-limon-chia', name: 'Limón con Chía' },
-      { id: 'v-ag1-tamarindo', name: 'Tamarindo' },
-      { id: 'v-ag1-mojito', name: 'Mojito' },
-      { id: 'v-ag1-maracuya', name: 'Maracuyá' },
-      { id: 'v-ag1-jamaica-sin', name: 'Jamaica sin Azúcar' },
-    ],
-  },
-  {
-    id: 'gen-agua-nat',
-    name: 'Agua Natural (Embotellada)',
-    price: 24.0,
-    category: 'bebidas',
-    kitchenStation: 'mexican',
-    description: 'Agua natural purificada 1L',
   },
   {
     id: 'gen-cafe',
@@ -509,8 +448,56 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     kitchenStation: 'mexican',
     description: 'Café americano recién hecho',
   },
+  {
+    id: 'gen-agua-nat',
+    name: 'Agua Natural (1 Litro)',
+    price: 24.0,
+    category: 'bebidas',
+    kitchenStation: 'mexican',
+    description: 'Agua natural (Un litro)',
+  },
 
-  // --- EXTRAS ---
+  // --- EXTRAS Y ADICIONALES DEL MENÚ OFICIAL ---
+  {
+    id: 'ext-papas-combo',
+    name: 'Extra: Con Papas (150 gr)',
+    price: 30.0,
+    category: 'extras',
+    kitchenStation: 'american_tacos',
+    description: 'Complemento de papas para hamburguesas o alitas (+ $30)',
+  },
+  {
+    id: 'ext-queso-taco',
+    name: 'Extra: Con Queso (Taco)',
+    price: 12.0,
+    category: 'extras',
+    kitchenStation: 'american_tacos',
+    description: 'Queso extra para taco (+ $12)',
+  },
+  {
+    id: 'ext-queso-general',
+    name: 'Extra: Queso (Pambazo / Guajolota / Guajoloyet)',
+    price: 15.0,
+    category: 'extras',
+    kitchenStation: 'mexican',
+    description: 'Queso extra (+ $15)',
+  },
+  {
+    id: 'ext-guisado-guajoloyet',
+    name: 'Extra: Guisado (Guajoloyet)',
+    price: 15.0,
+    category: 'extras',
+    kitchenStation: 'mexican',
+    description: 'Guisado extra (+ $15)',
+  },
+  {
+    id: 'ext-crema-pozole',
+    name: 'Extra: Crema (Pozole)',
+    price: 10.0,
+    category: 'extras',
+    kitchenStation: 'mexican',
+    description: 'Crema extra para pozole (+ $10)',
+  },
   {
     id: 'ext-personalizado',
     name: 'Extra Personalizado',
@@ -520,42 +507,10 @@ export const MOCK_PRODUCTS_GENERAL: Product[] = [
     isCustomPrice: true,
     description: 'Monto y descripción libre definido al momento por el operador',
   },
-  {
-    id: 'ext-papas-combo',
-    name: 'Extra: Con Papas',
-    price: 30.0,
-    category: 'extras',
-    kitchenStation: 'american_tacos',
-    description: 'Complemento de papas para hamburguesas o alitas',
-  },
-  {
-    id: 'ext-queso-taco',
-    name: 'Extra: Con Queso (Taco)',
-    price: 12.0,
-    category: 'extras',
-    kitchenStation: 'american_tacos',
-    description: 'Queso fundido extra para tacos',
-  },
-  {
-    id: 'ext-queso-guajoloyet',
-    name: 'Extra: Queso o Guisado (Guajoloyet / Volcán / Pambazo)',
-    price: 15.0,
-    category: 'extras',
-    kitchenStation: 'mexican',
-    description: 'Porción extra de queso Oaxaca o guisado',
-  },
-  {
-    id: 'ext-crema-pozole',
-    name: 'Extra: Crema (Pozole)',
-    price: 10.0,
-    category: 'extras',
-    kitchenStation: 'mexican',
-    description: 'Porción extra de crema',
-  },
 ];
 
 // ==========================================
-// MENÚ DETALLADO (Tarjetas limpias con selector interactivo de variantes al pulsar)
+// MENÚ DETALLADO
 // ==========================================
 export const MOCK_PRODUCTS_DETAILED: Product[] = MOCK_PRODUCTS_GENERAL;
 

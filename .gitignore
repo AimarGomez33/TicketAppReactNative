@@ -77,3 +77,6 @@ supabase_schema.sql
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Local n8n Infrastructure
+n8nInfrastructure/

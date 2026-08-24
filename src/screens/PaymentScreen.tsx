@@ -204,42 +204,33 @@ export function PaymentScreen() {
     );
   }
 
-  const handleProcessPayment = async () => {
-    setIsProcessing(true);
-    try {
-      // Imprimir ticket con desglose y total
-      await printTicketTCP(tableNumber, items, total, {
-        showPrices: true,
-        isKitchenComanda: false,
-        paymentMethod,
-      });
+  const handleProcessPayment = () => {
+    const tableSnapshot = tableNumber;
+    const itemsSnapshot = [...items];
+    const totalSnapshot = total;
+    const methodSnapshot = paymentMethod;
 
-      await completePayment(paymentMethod, total, 0);
+    // 1. Guardar cobro y liberar mesa de forma instantánea (0ms)
+    completePayment(methodSnapshot, totalSnapshot, 0);
 
-      showCustomAlert({
-        type: 'printer',
-        title: '¡Cobro Exitoso!',
-        message: `La cuenta de la Mesa ${tableNumber} se ha cerrado, el ticket se ha impreso y la mesa ha pasado a limpieza.`,
-        confirmText: 'Volver a Mesas',
-        onConfirm: () => {
-          setActiveTab('tables');
-        },
-      });
-    } catch (error: any) {
-      showCustomAlert({
-        type: 'error',
-        title: 'Aviso de Impresora',
-        message: `No se pudo conectar con la impresora (${error.message || '192.168.100.200'}). ¿Deseas cerrar la cuenta en el sistema sin ticket físico?`,
-        confirmText: 'Cerrar sin Imprimir',
-        cancelText: 'Cancelar',
-        onConfirm: async () => {
-          await completePayment(paymentMethod, total, 0);
-          setActiveTab('tables');
-        },
-      });
-    } finally {
-      setIsProcessing(false);
-    }
+    showCustomAlert({
+      type: 'success',
+      title: '¡Cobro Exitoso!',
+      message: `La cuenta de la Mesa ${tableSnapshot} se ha cerrado y la mesa ha quedado lista.`,
+      confirmText: 'Volver a Mesas',
+      onConfirm: () => {
+        setActiveTab('tables');
+      },
+    });
+
+    // 2. Impresión en segundo plano
+    void printTicketTCP(tableSnapshot, itemsSnapshot, totalSnapshot, {
+      showPrices: true,
+      isKitchenComanda: false,
+      paymentMethod: methodSnapshot,
+    }).catch((err) => {
+      console.warn('Aviso impresora ticket cobro:', err);
+    });
   };
 
   return (

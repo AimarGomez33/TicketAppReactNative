@@ -1,3 +1,4 @@
+// src/components/QuickSaleView.tsx
 import React, { useState, useMemo } from 'react';
 import {
   View,
@@ -6,7 +7,6 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  ActivityIndicator,
   Modal,
 } from 'react-native';
 import {
@@ -37,6 +37,8 @@ import {
   CircleDollarSign,
   CreditCard,
   Banknote,
+  Send,
+  CheckCircle2,
 } from 'lucide-react-native';
 
 type SubViewTab = 'editor' | 'history';
@@ -45,17 +47,18 @@ const QUICK_TABLES = ['Llevar', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10
 
 export const QuickSaleView: React.FC = () => {
   const [subTab, setSubTab] = useState<SubViewTab>('editor');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('top');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('Llevar');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
-  // Estado para el modal de cantidad y notas detalladas (+10, exactas, etc.)
+  // Modales
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [extraModalVisible, setExtraModalVisible] = useState<boolean>(false);
   const [payModalVisible, setPayModalVisible] = useState<boolean>(false);
   const [payMethod, setPayMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
+  const [isCartExpanded, setIsCartExpanded] = useState<boolean>(false);
 
   const appMode = useCartStore((state) => state.appMode);
   const menuProducts = useCartStore((state) => state.menuProducts);
@@ -79,6 +82,7 @@ export const QuickSaleView: React.FC = () => {
 
   const total = getQuickSaleTotal();
   const cartItems = Object.values(quickSaleCart);
+  const totalItemCount = cartItems.reduce((acc, it) => acc + it.quantity, 0);
 
   // Filtrar pedidos de mostrador / venta rápida
   const mostradorOrders = useMemo(() => {
@@ -92,6 +96,7 @@ export const QuickSaleView: React.FC = () => {
     const products = appMode === 'detailed'
       ? getProductsByMode('detailed')
       : (menuProducts && menuProducts.length > 0 ? menuProducts : getProductsByMode('general'));
+
     return products.filter((p: Product) => {
       if (searchQuery.trim().length > 0) {
         const q = searchQuery.toLowerCase().trim();
@@ -100,6 +105,25 @@ export const QuickSaleView: React.FC = () => {
           (p.description && p.description.toLowerCase().includes(q))
         );
       }
+
+      if (selectedCategory === 'top') {
+        return [
+          'gen-chalupa',
+          'gen-quesadilla',
+          'gen-tostada',
+          'gen-pambazo-adob',
+          'gen-guajolota',
+          'gen-guajoloyet-adob',
+          'gen-pozole-grande',
+          'gen-taco',
+          'gen-burg-especial',
+          'gen-alitas-6',
+          'gen-papas-boneless',
+          'gen-refresco',
+          'gen-agua-500',
+        ].includes(p.id);
+      }
+
       if (selectedCategory === 'all') return true;
       return p.category === selectedCategory;
     });
@@ -144,122 +168,76 @@ export const QuickSaleView: React.FC = () => {
     setPayModalVisible(true);
   };
 
-  const handleProcessQuickPayment = async (method?: 'cash' | 'card' | 'transfer') => {
+  // Cobro Instantáneo y No Bloqueante
+  const handleProcessQuickPayment = (method?: 'cash' | 'card' | 'transfer') => {
     if (cartItems.length === 0) return;
     const currentTable = selectedTable.trim() || 'Llevar';
     const effectiveMethod = method || payMethod;
 
-    setIsProcessing(true);
-    try {
-      await printTicketTCP(currentTable, cartItems, total, {
-        showPrices: true,
-        paymentMethod: effectiveMethod,
-      });
+    setPayModalVisible(false);
+    setIsCartExpanded(false);
 
-      await createQuickSaleOrder(currentTable, effectiveMethod, total, 0);
+    // 1. Guardar orden en local de forma inmediata (0ms)
+    createQuickSaleOrder(currentTable, effectiveMethod, total, 0);
 
-      showCustomAlert({
-        title: '¡Cobro de Mostrador Exitoso!',
-        message: `Pedido de ${currentTable.toUpperCase()} cobrado por $${total.toFixed(2)}. Ticket impreso.`,
-        type: 'success',
-      });
-      setPayModalVisible(false);
-    } catch (err: any) {
-      await createQuickSaleOrder(currentTable, effectiveMethod, total, 0);
-      showCustomAlert({
-        title: 'Cobro Registrado (Aviso Impresión)',
-        message: `El cobro se registró en el sistema, pero la impresora no respondió (${err.message || '192.168.100.200'}).`,
-        type: 'printer',
-      });
-      setPayModalVisible(false);
-    } finally {
-      setIsProcessing(false);
-    }
+    showCustomAlert({
+      title: '¡Cobro de Mostrador Exitoso!',
+      message: `Pedido de ${currentTable.toUpperCase()} cobrado por $${total.toFixed(2)}.`,
+      type: 'success',
+    });
+
+    // 2. Transmisión a impresora en background sin congelar la app
+    void printTicketTCP(currentTable, cartItems, total, {
+      showPrices: true,
+      paymentMethod: effectiveMethod,
+    }).catch((err: any) => {
+      console.warn('Fallo impresión en background:', err);
+    });
   };
 
-  // Procesar impresión y guardado de comanda manual (Nueva o Editada)
-  const handlePrintAndSaveOrder = async () => {
+  // Guardar e Imprimir Comanda (No bloqueante)
+  const handlePrintAndSaveOrder = () => {
     if (cartItems.length === 0) {
       showCustomAlert({
         title: 'Comanda Vacía',
-        message: 'Agrega al menos un platillo a la comanda antes de generar el ticket.',
+        message: 'Agrega al menos un platillo antes de generar el ticket.',
         type: 'info',
       });
       return;
     }
 
     const currentTable = selectedTable.trim() || 'Llevar';
-    setIsProcessing(true);
-    try {
-      if (editingQuickSaleOrderId) {
-        // Modo Edición: Actualizar pedido existente y reimprimir
-        const orderId = editingQuickSaleOrderId;
-        await printTicketTCP(currentTable, cartItems, total, {
-          showPrices: true,
-          isReprint: true,
-        });
+    setIsCartExpanded(false);
 
-        await updateAndSaveQuickSaleOrder(orderId, currentTable);
+    if (editingQuickSaleOrderId) {
+      const orderId = editingQuickSaleOrderId;
+      updateAndSaveQuickSaleOrder(orderId, currentTable);
 
-        showCustomAlert({
-          title: 'Pedido Actualizado e Impreso',
-          message: `El pedido para ${currentTable.toUpperCase()} se actualizó con éxito ($${total.toFixed(2)}). Ticket reimpreso.`,
-          type: 'success',
-        });
-      } else {
-        // Modo Nuevo: Generar nuevo pedido e imprimir
-        const newOrder = await createQuickSaleOrder(currentTable);
-        if (newOrder) {
-          await printTicketTCP(currentTable, cartItems, total, {
-            showPrices: true,
-          });
-
-          showCustomAlert({
-            title: 'Ticket de Cuenta Generado',
-            message: `Pedido emitido para ${currentTable.toUpperCase()} por un total de $${total.toFixed(2)}. Ticket impreso.`,
-            type: 'success',
-          });
-        }
-      }
-    } catch (err: any) {
-      // Fallback: guardar pedido aun si la impresora no responde
-      if (editingQuickSaleOrderId) {
-        await updateAndSaveQuickSaleOrder(editingQuickSaleOrderId, currentTable);
-      } else {
-        await createQuickSaleOrder(currentTable);
-      }
       showCustomAlert({
-        title: 'Pedido Guardado (Aviso Impresión)',
-        message: `El pedido se registró en el sistema, pero la impresora no respondió (${err.message || '192.168.100.200'}).`,
-        type: 'printer',
-      });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Acción de Reimpresión desde el Historial
-  const handleReprintFromHistory = async (orderId: string, tableLabel: string) => {
-    setIsProcessing(true);
-    try {
-      await reprintQuickSaleOrder(orderId);
-      showCustomAlert({
-        title: 'Ticket Reimpreso',
-        message: `Se ha enviado la copia del ticket para ${tableLabel.toUpperCase()} a la impresora.`,
+        title: 'Pedido Actualizado',
+        message: `El pedido para ${currentTable.toUpperCase()} se actualizó con éxito ($${total.toFixed(2)}).`,
         type: 'success',
       });
-    } catch (err: any) {
+
+      void printTicketTCP(currentTable, cartItems, total, {
+        showPrices: true,
+        isReprint: true,
+      }).catch(err => console.warn(err));
+    } else {
+      createQuickSaleOrder(currentTable);
+
       showCustomAlert({
-        title: 'Error de Impresión',
-        message: `No se pudo conectar con la impresora térmica (${err.message || '192.168.100.200'}).`,
-        type: 'printer',
+        title: 'Ticket de Cuenta Generado',
+        message: `Pedido emitido para ${currentTable.toUpperCase()} ($${total.toFixed(2)}).`,
+        type: 'success',
       });
-    } finally {
-      setIsProcessing(false);
+
+      void printTicketTCP(currentTable, cartItems, total, {
+        showPrices: true,
+      }).catch(err => console.warn(err));
     }
   };
 
-  // Acción de Cargar para Editar desde el Historial
   const handleEditFromHistory = (orderId: string, orderTable: string) => {
     loadQuickSaleOrderForEdit(orderId);
     setSelectedTable(orderTable || 'Llevar');
@@ -270,6 +248,8 @@ export const QuickSaleView: React.FC = () => {
     cancelEditQuickSaleOrder();
     setSelectedTable('Llevar');
   };
+
+  const categoriesToUse = (menuCategories && menuCategories.length > 0 ? menuCategories : CATEGORIES_GENERAL);
 
   return (
     <View style={styles.container}>
@@ -282,7 +262,7 @@ export const QuickSaleView: React.FC = () => {
         >
           <Zap size={14} color={subTab === 'editor' ? '#FFF' : '#5a3f49'} />
           <Text style={[styles.subTabBtnText, subTab === 'editor' && styles.subTabBtnTextActive]}>
-            {editingQuickSaleOrderId ? `Editando (${selectedTable})` : 'Nueva Comanda'}
+            {editingQuickSaleOrderId ? `Editando (${selectedTable})` : 'Nueva Venta Mostrador'}
           </Text>
         </TouchableOpacity>
 
@@ -298,9 +278,9 @@ export const QuickSaleView: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* ================= VISTA 1: EDITOR DE COMANDA MANUAL ================= */}
+      {/* ================= VISTA 1: EDITOR DE COMANDA MOSTRADOR ================= */}
       {subTab === 'editor' && (
-        <ScrollView style={styles.mainScroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.editorContainer}>
           {/* Banner si está en modo Edición */}
           {editingQuickSaleOrderId && (
             <View style={styles.editingBanner}>
@@ -316,27 +296,13 @@ export const QuickSaleView: React.FC = () => {
                 activeOpacity={0.7}
               >
                 <X size={14} color="#ba1a1a" />
-                <Text style={styles.cancelEditBtnText}>Cancelar Edición</Text>
+                <Text style={styles.cancelEditBtnText}>Cancelar</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {/* Selector de Mesa / Llevar */}
           <View style={styles.tableSelectorCard}>
-            <View style={styles.tableSelectorHeader}>
-              <View style={styles.tableSelectorTitleRow}>
-                {selectedTable.toLowerCase() === 'llevar' ? (
-                  <ShoppingBag size={15} color="#b3006c" />
-                ) : (
-                  <Hash size={15} color="#b3006c" />
-                )}
-                <Text style={styles.tableSelectorTitle}>
-                  Destino / Mesa: <Text style={styles.currentTableHighlight}>{selectedTable.toUpperCase()}</Text>
-                </Text>
-              </View>
-            </View>
-
-            {/* Chips de Selección Rápida */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -360,27 +326,15 @@ export const QuickSaleView: React.FC = () => {
                 );
               })}
             </ScrollView>
-
-            {/* Input para Mesa o Nombre Personalizado */}
-            <View style={styles.customTableInputRow}>
-              <Text style={styles.customTableLabel}>Otro número o nombre:</Text>
-              <TextInput
-                style={styles.customTableInput}
-                placeholder="Ej. 14, Barra, Terraza..."
-                placeholderTextColor="#8e6e79"
-                value={selectedTable}
-                onChangeText={setSelectedTable}
-              />
-            </View>
           </View>
 
-          {/* Barra de Búsqueda, Botón Extra y Limpieza de Menú */}
+          {/* Barra de Búsqueda y Botón Extra */}
           <View style={styles.searchRow}>
             <View style={styles.searchContainer}>
               <Search size={16} color="#8e6e79" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Buscar platillo en menú..."
+                placeholder="Buscar platillos en mostrador..."
                 placeholderTextColor="#8e6e79"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -400,25 +354,32 @@ export const QuickSaleView: React.FC = () => {
               <CircleDollarSign size={15} color="#FFF" />
               <Text style={styles.extraButtonText}>+ Extra $</Text>
             </TouchableOpacity>
-
-            {cartItems.length > 0 && !editingQuickSaleOrderId && (
-              <TouchableOpacity
-                style={styles.clearBtn}
-                onPress={clearQuickSale}
-                activeOpacity={0.7}
-              >
-                <Trash2 size={15} color="#ba1a1a" />
-              </TouchableOpacity>
-            )}
           </View>
 
-          {/* Categorías Rápidas (Chips) */}
+          {/* Categorías (Chips Amplios) */}
           {searchQuery.length === 0 && (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.categoriesBar}
             >
+              <TouchableOpacity
+                style={[
+                  styles.categoryChip,
+                  selectedCategory === 'top' && styles.categoryChipActive,
+                ]}
+                onPress={() => setSelectedCategory('top')}
+              >
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    selectedCategory === 'top' && styles.categoryChipTextActive,
+                  ]}
+                >
+                  Populares
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={[
                   styles.categoryChip,
@@ -435,7 +396,8 @@ export const QuickSaleView: React.FC = () => {
                   Todos
                 </Text>
               </TouchableOpacity>
-              {(menuCategories && menuCategories.length > 0 ? menuCategories : CATEGORIES_GENERAL).filter((c) => c.id !== 'top').map((cat) => (
+
+              {categoriesToUse.filter(c => c.id !== 'top').map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
                   style={[
@@ -457,340 +419,328 @@ export const QuickSaleView: React.FC = () => {
             </ScrollView>
           )}
 
-          {/* Grilla de Platillos con Selector Dinámico (1x1, +10 o N) */}
-          <View style={styles.productsGrid}>
-            {availableProducts.slice(0, 24).map((product) => {
-              const currentItem = quickSaleCart[product.id];
-              const qty = currentItem ? currentItem.quantity : 0;
-              return (
-                <View
-                  key={product.id}
-                  style={[styles.productPill, qty > 0 && styles.productPillActive]}
-                >
-                  {/* Nombre y Precio (Al tocar abre el selector N con notas) */}
+          {/* Grilla Amplia de Platillos (Exactamente igual de espaciosa que el menú de mesas) */}
+          <ScrollView
+            style={styles.productsGridScroll}
+            contentContainerStyle={styles.productsGridContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.cardsRow}>
+              {availableProducts.map((product) => {
+                const currentItem = quickSaleCart[product.id];
+                const qty = currentItem ? currentItem.quantity : 0;
+                const isBurgerOrWings = product.category === 'hamburguesas' || product.category === 'alitas';
+
+                return (
                   <TouchableOpacity
-                    style={styles.productPillInfo}
+                    key={product.id}
+                    style={[styles.productCard, qty > 0 && styles.productCardActive]}
                     onPress={() => openQuantityModal(product)}
-                    activeOpacity={0.7}
+                    activeOpacity={0.85}
                   >
-                    <Text
-                      style={[styles.productPillName, qty > 0 && styles.productPillNameActive]}
-                      numberOfLines={1}
-                    >
-                      {product.name}
-                    </Text>
-                    <Text style={styles.productPillPrice}>${product.price.toFixed(2)}</Text>
-                  </TouchableOpacity>
+                    <View style={styles.cardTop}>
+                      <View style={styles.cardTitleWrap}>
+                        <Text style={styles.cardProductName} numberOfLines={2}>
+                          {product.name}
+                        </Text>
+                        {qty > 0 && (
+                          <View style={styles.qtyBadge}>
+                            <Text style={styles.qtyBadgeText}>{qty}</Text>
+                          </View>
+                        )}
+                      </View>
 
-                  {/* Acciones de Adición Rápida */}
-                  <View style={styles.pillActions}>
-                    {/* Botón Rápido +10 */}
-                    <TouchableOpacity
-                      style={styles.pillQuick10Btn}
-                      onPress={() => {
-                        if (product.variants && product.variants.length > 0) {
-                          openQuantityModal(product);
-                        } else {
-                          addQuickSaleItem(product, 10);
-                        }
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.pillQuick10Text}>+10</Text>
-                    </TouchableOpacity>
+                      {product.description ? (
+                        <Text style={styles.cardProductDesc} numberOfLines={2}>
+                          {product.description}
+                        </Text>
+                      ) : null}
 
-                    {/* Botón +1 o Badge con cantidad actual */}
-                    <TouchableOpacity
-                      style={[styles.qtyBadge, qty > 0 && styles.qtyBadgeActive]}
-                      onPress={() => {
-                        if (product.variants && product.variants.length > 0) {
-                          openQuantityModal(product);
-                        } else {
-                          addQuickSaleItem(product, 1);
-                        }
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      {qty > 0 ? (
-                        <Text style={styles.qtyBadgeTextActive}>{qty}</Text>
-                      ) : (
-                        <Plus size={13} color="#b3006c" />
-                      )}
-                    </TouchableOpacity>
-
-                    {/* Botón Modal Cantidad N / Notas */}
-                    <TouchableOpacity
-                      style={styles.pillModalBtn}
-                      onPress={() => openQuantityModal(product)}
-                      activeOpacity={0.7}
-                    >
-                      <Layers size={12} color={qty > 0 ? '#b3006c' : '#8e6e79'} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Tarjeta de Desglose de la Comanda y Total a Pagar */}
-          <View style={styles.orderCard}>
-            <View style={styles.orderCardHeader}>
-              <View style={styles.orderTitleRow}>
-                <FileText size={16} color="#b3006c" />
-                <Text style={styles.orderCardTitle}>
-                  {editingQuickSaleOrderId
-                    ? `Artículos de ${selectedTable.toUpperCase()}`
-                    : `Desglose de Comanda (${cartItems.reduce((s, i) => s + i.quantity, 0)} arts.)`}
-                </Text>
-              </View>
-            </View>
-
-            {cartItems.length === 0 ? (
-              <View style={styles.emptyCartBox}>
-                <Text style={styles.emptyCartHint}>
-                  Toca los platillos arriba para agregarlos individualmente, por +10 o por cantidad personalizada.
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.cartItemsList}>
-                {cartItems.map((item) => (
-                  <View key={item.product.id} style={styles.cartItemRow}>
-                    {/* Tocar el detalle abre el selector N / notas */}
-                    <TouchableOpacity
-                      style={styles.cartItemDetails}
-                      onPress={() => openQuantityModal(item.product)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.cartItemName}>{item.product.name}</Text>
-                      <Text style={styles.cartItemSub}>
-                        ${item.product.price.toFixed(2)} c/u {item.notes ? `• Nota: ${item.notes}` : ''}
-                      </Text>
-                    </TouchableOpacity>
-
-                    {/* Controles de Cantidad ( -10, -1, Cantidad, +1, +10 ) */}
-                    <View style={styles.qtyControls}>
-                      {item.quantity >= 10 && (
-                        <TouchableOpacity
-                          style={styles.qtyStep10Btn}
-                          onPress={() => addQuickSaleItem(item.product, -10)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.qtyStep10Text}>-10</Text>
-                        </TouchableOpacity>
-                      )}
-
-                      <TouchableOpacity
-                        style={styles.qtyBtn}
-                        onPress={() => addQuickSaleItem(item.product, -1)}
-                        activeOpacity={0.7}
-                      >
-                        <Minus size={12} color="#b3006c" />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => openQuantityModal(item.product)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.qtyCount}>{item.quantity}</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.qtyBtn}
-                        onPress={() => addQuickSaleItem(item.product, 1)}
-                        activeOpacity={0.7}
-                      >
-                        <Plus size={12} color="#b3006c" />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.qtyStep10Btn}
-                        onPress={() => addQuickSaleItem(item.product, 10)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.qtyStep10Text}>+10</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text style={styles.itemTotalText}>
-                      ${(item.product.price * item.quantity).toFixed(2)}
-                    </Text>
-
-                    <TouchableOpacity
-                      style={styles.deleteBtn}
-                      onPress={() => removeQuickSaleItem(item.product.id)}
-                      activeOpacity={0.7}
-                    >
-                      <Trash2 size={14} color="#ba1a1a" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-
-                {/* Línea Separadora */}
-                <View style={styles.divider} />
-
-                {/* Total a Pagar Destacado */}
-                <View style={styles.totalRow}>
-                  <Text style={styles.totalLabel}>TOTAL A PAGAR ({selectedTable.toUpperCase()}):</Text>
-                  <Text style={styles.totalAmount}>${total.toFixed(2)}</Text>
-                </View>
-              </View>
-            )}
-
-            {/* Botones de Acción de Comanda (Pre-cuenta y Cobro Directo) */}
-            {cartItems.length > 0 && (
-              <View style={styles.cartActionButtonsRow}>
-                {/* Botón 1: Imprimir Pre-cuenta / Actualizar */}
-                <TouchableOpacity
-                  style={styles.preTicketBtn}
-                  onPress={handlePrintAndSaveOrder}
-                  disabled={isProcessing}
-                  activeOpacity={0.8}
-                >
-                  {isProcessing ? (
-                    <ActivityIndicator size="small" color="#5a3f49" />
-                  ) : (
-                    <>
-                      <Printer size={16} color="#5a3f49" />
-                      <Text style={styles.preTicketBtnText}>
-                        {editingQuickSaleOrderId ? 'ACTUALIZAR' : 'PRE-CUENTA'}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                {/* Botón 2: Cobrar Inmediatamente en Caja */}
-                <TouchableOpacity
-                  style={styles.directPayBtn}
-                  onPress={openPayModal}
-                  disabled={isProcessing}
-                  activeOpacity={0.85}
-                >
-                  <Banknote size={18} color="#ffffff" />
-                  <Text style={styles.directPayBtnText}>
-                    COBRAR (${total.toFixed(2)})
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </ScrollView>
-      )}
-
-      {/* ================= VISTA 2: HISTORIAL DE PEDIDOS DE MOSTRADOR ================= */}
-      {subTab === 'history' && (
-        <ScrollView style={styles.historyScroll} contentContainerStyle={styles.historyContent}>
-          {mostradorOrders.length === 0 ? (
-            <View style={styles.emptyHistoryCard}>
-              <Clock size={40} color="#b3006c" />
-              <Text style={styles.emptyHistoryTitle}>Sin Pedidos Registrados</Text>
-              <Text style={styles.emptyHistoryText}>
-                Las comandas generadas en Mostrador aparecerán aquí identificadas por su Mesa o Para Llevar, con opciones directas de reimpresión y edición.
-              </Text>
-              <TouchableOpacity
-                style={styles.goToEditorBtn}
-                onPress={() => setSubTab('editor')}
-                activeOpacity={0.8}
-              >
-                <Plus size={14} color="#FFF" />
-                <Text style={styles.goToEditorBtnText}>CREAR NUEVA COMANDA</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            mostradorOrders.map((order) => {
-              const isTakeout =
-                !order.tableNumber ||
-                order.tableNumber.toLowerCase() === 'llevar' ||
-                order.tableNumber.toLowerCase() === 'para llevar' ||
-                order.tableNumber.toLowerCase() === 'mostrador';
-
-              const tableDisplayName = isTakeout ? 'PARA LLEVAR' : `MESA ${order.tableNumber.toUpperCase()}`;
-
-              return (
-                <View key={order.id} style={styles.historyCard}>
-                  {/* Cabecera del Pedido */}
-                  <View style={styles.historyCardHeader}>
-                    <View style={[styles.tableBadge, isTakeout ? styles.tableBadgeTakeout : styles.tableBadgeTable]}>
-                      {isTakeout ? (
-                        <ShoppingBag size={13} color="#b3006c" />
-                      ) : (
-                        <Hash size={13} color="#1d4ed8" />
-                      )}
-                      <Text
-                        style={[
-                          styles.tableBadgeText,
-                          isTakeout ? styles.tableBadgeTextTakeout : styles.tableBadgeTextTable,
-                        ]}
-                      >
-                        {tableDisplayName}
-                      </Text>
-                    </View>
-
-                    <View style={styles.historyMetaRow}>
-                      <Text style={styles.historyTime}>{order.timestamp}</Text>
-                      {order.lastModified && (
-                        <View style={styles.modifiedBadge}>
-                          <Text style={styles.modifiedBadgeText}>Editado {order.lastModified}</Text>
+                      {isBurgerOrWings && (
+                        <View style={styles.comboChip}>
+                          <Text style={styles.comboChipText}>Combo Papas +$30</Text>
                         </View>
                       )}
                     </View>
-                  </View>
 
-                  {/* Lista de Platillos del Pedido */}
-                  <View style={styles.historyItemsList}>
-                    {order.items.map((it) => (
-                      <View key={it.product.id} style={styles.historyItemRow}>
-                        <Text style={styles.historyItemQty}>{it.quantity}x</Text>
-                        <Text style={styles.historyItemName} numberOfLines={1}>
-                          {it.product.name}
-                        </Text>
-                        <Text style={styles.historyItemPrice}>
-                          ${(it.product.price * it.quantity).toFixed(2)}
-                        </Text>
+                    <View style={styles.cardFooter}>
+                      <Text style={styles.cardPrice}>${product.price.toFixed(2)}</Text>
+
+                      <View style={styles.cardActions}>
+                        {qty > 0 && (
+                          <TouchableOpacity
+                            style={styles.cardMinusBtn}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              removeQuickSaleItem(product.id);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Minus size={13} color="#5a3f49" />
+                          </TouchableOpacity>
+                        )}
+
+                        <TouchableOpacity
+                          style={styles.cardPlusBtn}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            if (product.variants && product.variants.length > 0) {
+                              openQuantityModal(product);
+                            } else {
+                              addQuickSaleItem(product, 1);
+                            }
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Plus size={14} color="#ffffff" />
+                        </TouchableOpacity>
                       </View>
-                    ))}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          {/* Barra Flotante de Total y Cobro Rápido */}
+          <View style={styles.bottomCartBar}>
+            <TouchableOpacity
+              style={styles.cartSummaryToggle}
+              onPress={() => setIsCartExpanded(!isCartExpanded)}
+              activeOpacity={0.8}
+            >
+              <View>
+                <Text style={styles.cartTableLabel}>
+                  {selectedTable.toUpperCase()} • {totalItemCount} {totalItemCount === 1 ? 'art.' : 'arts.'}
+                </Text>
+                <Text style={styles.cartTotalValue}>${total.toFixed(2)}</Text>
+              </View>
+              <Text style={styles.cartExpandText}>
+                {isCartExpanded ? '▼ Ocultar' : '▲ Ver Comanda'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.cartQuickActionsRow}>
+              {cartItems.length > 0 && (
+                <TouchableOpacity
+                  style={styles.printOrderBtn}
+                  onPress={handlePrintAndSaveOrder}
+                  activeOpacity={0.8}
+                >
+                  <Printer size={16} color="#FFF" />
+                  <Text style={styles.printOrderBtnText}>Ticket</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[styles.payOrderBtn, cartItems.length === 0 && styles.payOrderBtnDisabled]}
+                onPress={openPayModal}
+                disabled={cartItems.length === 0}
+                activeOpacity={0.85}
+              >
+                <Banknote size={16} color="#FFF" />
+                <Text style={styles.payOrderBtnText}>COBRAR (${total.toFixed(2)})</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Modal de Desglose Desplegable */}
+          <Modal
+            visible={isCartExpanded}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setIsCartExpanded(false)}
+          >
+            <View style={styles.expandedCartOverlay}>
+              <View style={styles.expandedCartCard}>
+                <View style={styles.expandedCartHeader}>
+                  <View>
+                    <Text style={styles.expandedCartTitle}>Comanda Mostrador ({selectedTable})</Text>
+                    <Text style={styles.expandedCartSub}>{totalItemCount} artículos registrados</Text>
                   </View>
+                  <TouchableOpacity
+                    style={styles.closeExpandedBtn}
+                    onPress={() => setIsCartExpanded(false)}
+                  >
+                    <X size={18} color="#5a3f49" />
+                  </TouchableOpacity>
+                </View>
 
-                  <View style={styles.historyDivider} />
-
-                  {/* Total y Botones de Acción */}
-                  <View style={styles.historyFooter}>
-                    <View style={styles.historyTotalContainer}>
-                      <Text style={styles.historyTotalLabel}>Total:</Text>
-                      <Text style={styles.historyTotalValue}>${order.total.toFixed(2)}</Text>
-                    </View>
-
-                    <View style={styles.historyActionsRow}>
-                      {/* Botón Reimprimir */}
+                <ScrollView style={styles.expandedCartList}>
+                  {cartItems.map((item) => (
+                    <View key={item.product.id} style={styles.expandedItemRow}>
                       <TouchableOpacity
-                        style={styles.reprintBtn}
-                        onPress={() => handleReprintFromHistory(order.id, order.tableNumber)}
-                        disabled={isProcessing}
-                        activeOpacity={0.75}
+                        style={styles.expandedItemLeft}
+                        onPress={() => {
+                          setIsCartExpanded(false);
+                          openQuantityModal(item.product);
+                        }}
                       >
-                        <Printer size={14} color="#b3006c" />
-                        <Text style={styles.reprintBtnText}>Reimprimir</Text>
+                        <Text style={styles.expandedItemName}>
+                          {item.quantity}x {item.product.name}
+                        </Text>
+                        {item.notes ? (
+                          <Text style={styles.expandedItemNotes}>* {item.notes}</Text>
+                        ) : null}
                       </TouchableOpacity>
 
-                      {/* Botón Editar */}
-                      <TouchableOpacity
-                        style={styles.editOrderBtn}
-                        onPress={() => handleEditFromHistory(order.id, order.tableNumber)}
-                        disabled={isProcessing}
-                        activeOpacity={0.75}
-                      >
-                        <Edit3 size={14} color="#ffffff" />
-                        <Text style={styles.editOrderBtnText}>Editar</Text>
-                      </TouchableOpacity>
+                      <View style={styles.expandedItemRight}>
+                        <Text style={styles.expandedItemPrice}>
+                          ${(item.product.price * item.quantity).toFixed(2)}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.removeItemBtn}
+                          onPress={() => removeQuickSaleItem(item.product.id)}
+                        >
+                          <Trash2 size={14} color="#ba1a1a" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
+                  ))}
+                </ScrollView>
+
+                <View style={styles.expandedCartFooter}>
+                  <View style={styles.expandedTotalRow}>
+                    <Text style={styles.expandedTotalLabel}>Total a Pagar:</Text>
+                    <Text style={styles.expandedTotalVal}>${total.toFixed(2)}</Text>
+                  </View>
+                  <View style={styles.expandedActionsRow}>
+                    <TouchableOpacity
+                      style={styles.clearAllBtn}
+                      onPress={clearQuickSale}
+                    >
+                      <Trash2 size={15} color="#ba1a1a" />
+                      <Text style={styles.clearAllBtnText}>Vaciar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.expandedPayBtn}
+                      onPress={openPayModal}
+                    >
+                      <Text style={styles.expandedPayBtnText}>Pagar Ahora</Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-              );
-            })
+              </View>
+            </View>
+          </Modal>
+        </View>
+      )}
+
+      {/* ================= VISTA 2: HISTORIAL DE VENTAS ================= */}
+      {subTab === 'history' && (
+        <ScrollView style={styles.historyScroll} showsVerticalScrollIndicator={false}>
+          {mostradorOrders.length === 0 ? (
+            <View style={styles.emptyHistoryBox}>
+              <Clock size={40} color="#8e6e79" />
+              <Text style={styles.emptyHistoryTitle}>Sin pedidos de mostrador hoy</Text>
+              <Text style={styles.emptyHistoryText}>
+                Los pedidos generados en esta sesión aparecerán aquí para reimpresión o consulta.
+              </Text>
+            </View>
+          ) : (
+            mostradorOrders.map((order) => (
+              <View key={order.id} style={styles.historyCard}>
+                <View style={styles.historyCardHeader}>
+                  <View>
+                    <Text style={styles.historyTableNumber}>
+                      {order.tableNumber.toUpperCase()} • Folio #{order.id.slice(-6).toUpperCase()}
+                    </Text>
+                    <Text style={styles.historyDate}>{order.timestamp}</Text>
+                  </View>
+                  <Text style={styles.historyTotal}>${order.total.toFixed(2)}</Text>
+                </View>
+
+                <View style={styles.historyItemsList}>
+                  {order.items.map((it, idx) => (
+                    <Text key={idx} style={styles.historyItemText} numberOfLines={1}>
+                      • {it.quantity}x {it.product.name} {it.notes ? `(${it.notes})` : ''}
+                    </Text>
+                  ))}
+                </View>
+
+                <View style={styles.historyActionsRow}>
+                  <TouchableOpacity
+                    style={styles.reprintBtn}
+                    onPress={() => reprintQuickSaleOrder(order.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Printer size={14} color="#b3006c" />
+                    <Text style={styles.reprintBtnText}>Reimprimir</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.editHistoryBtn}
+                    onPress={() => handleEditFromHistory(order.id, order.tableNumber)}
+                    activeOpacity={0.8}
+                  >
+                    <Edit3 size={14} color="#FFF" />
+                    <Text style={styles.editHistoryBtnText}>Modificar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
           )}
         </ScrollView>
       )}
 
-      {/* Modal de Cantidad Exacta (N), Sumar +10/+20, y Notas de Cocina */}
+      {/* Modal de Cobro Rápido */}
+      <Modal
+        visible={payModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPayModalVisible(false)}
+      >
+        <View style={styles.payModalOverlay}>
+          <View style={styles.payModalCard}>
+            <View style={styles.payModalHeader}>
+              <Text style={styles.payModalTitle}>Cobrar Pedido ({selectedTable})</Text>
+              <TouchableOpacity onPress={() => setPayModalVisible(false)}>
+                <X size={18} color="#5a3f49" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.payModalTotal}>${total.toFixed(2)}</Text>
+
+            <Text style={styles.payMethodLabel}>SELECCIONA MÉTODO DE PAGO</Text>
+            <View style={styles.payMethodsGrid}>
+              <TouchableOpacity
+                style={[styles.payMethodBtn, payMethod === 'cash' && styles.payMethodBtnActive]}
+                onPress={() => handleProcessQuickPayment('cash')}
+                activeOpacity={0.8}
+              >
+                <Banknote size={20} color={payMethod === 'cash' ? '#FFF' : '#b3006c'} />
+                <Text style={[styles.payMethodText, payMethod === 'cash' && styles.payMethodTextActive]}>
+                  Efectivo
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.payMethodBtn, payMethod === 'card' && styles.payMethodBtnActive]}
+                onPress={() => handleProcessQuickPayment('card')}
+                activeOpacity={0.8}
+              >
+                <CreditCard size={20} color={payMethod === 'card' ? '#FFF' : '#b3006c'} />
+                <Text style={[styles.payMethodText, payMethod === 'card' && styles.payMethodTextActive]}>
+                  Tarjeta
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.payMethodBtn, payMethod === 'transfer' && styles.payMethodBtnActive]}
+                onPress={() => handleProcessQuickPayment('transfer')}
+                activeOpacity={0.8}
+              >
+                <Send size={20} color={payMethod === 'transfer' ? '#FFF' : '#b3006c'} />
+                <Text style={[styles.payMethodText, payMethod === 'transfer' && styles.payMethodTextActive]}>
+                  Transferencia
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Cantidad / Notas / Combo */}
       <QuantityModal
         visible={modalVisible}
         product={modalProduct}
@@ -800,90 +750,12 @@ export const QuickSaleView: React.FC = () => {
         onConfirm={handleModalConfirm}
       />
 
-      {/* Modal de Cobro Extra Personalizado */}
+      {/* Modal de Extra Personalizado */}
       <CustomExtraModal
         visible={extraModalVisible}
         onClose={() => setExtraModalVisible(false)}
         defaultDestination="quick"
       />
-
-      {/* Modal de Cobro Directo para Mostrador */}
-      <Modal visible={payModalVisible} transparent animationType="fade" onRequestClose={() => setPayModalVisible(false)}>
-        <View style={styles.payModalOverlay}>
-          <View style={styles.payModalContainer}>
-            <View style={styles.payModalHeader}>
-              <View style={styles.payModalTitleRow}>
-                <Banknote size={20} color="#b3006c" />
-                <Text style={styles.payModalTitle}>Cobro - {selectedTable.toUpperCase()}</Text>
-              </View>
-              <TouchableOpacity style={styles.payModalCloseBtn} onPress={() => setPayModalVisible(false)}>
-                <X size={18} color="#5a3f49" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Total Destacado */}
-            <View style={styles.payTotalBox}>
-              <Text style={styles.payTotalLabel}>TOTAL A PAGAR</Text>
-              <Text style={styles.payTotalAmount}>${total.toFixed(2)}</Text>
-            </View>
-
-            {/* Selector de Método de Pago */}
-            <View style={styles.payMethodRow}>
-              <TouchableOpacity
-                style={[styles.payMethodBtn, payMethod === 'cash' && styles.payMethodBtnActive]}
-                onPress={() => setPayMethod('cash')}
-                activeOpacity={0.8}
-              >
-                <Banknote size={16} color={payMethod === 'cash' ? '#FFF' : '#5a3f49'} />
-                <Text style={[styles.payMethodBtnText, payMethod === 'cash' && styles.payMethodBtnTextActive]}>
-                  Efectivo
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.payMethodBtn, payMethod === 'card' && styles.payMethodBtnActive]}
-                onPress={() => setPayMethod('card')}
-                activeOpacity={0.8}
-              >
-                <CreditCard size={16} color={payMethod === 'card' ? '#FFF' : '#5a3f49'} />
-                <Text style={[styles.payMethodBtnText, payMethod === 'card' && styles.payMethodBtnTextActive]}>
-                  Tarjeta
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.payMethodBtn, payMethod === 'transfer' && styles.payMethodBtnActive]}
-                onPress={() => setPayMethod('transfer')}
-                activeOpacity={0.8}
-              >
-                <Zap size={16} color={payMethod === 'transfer' ? '#FFF' : '#5a3f49'} />
-                <Text style={[styles.payMethodBtnText, payMethod === 'transfer' && styles.payMethodBtnTextActive]}>
-                  Transferencia
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Botón Finalizar Cobro e Imprimir */}
-            <TouchableOpacity
-              style={styles.confirmPayBtn}
-              onPress={() => handleProcessQuickPayment()}
-              disabled={isProcessing}
-              activeOpacity={0.85}
-            >
-              {isProcessing ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <>
-                  <Printer size={18} color="#ffffff" />
-                  <Text style={styles.confirmPayBtnText}>
-                    FINALIZAR COBRO E IMPRIMIR (${total.toFixed(2)})
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 };
@@ -895,53 +767,46 @@ const styles = StyleSheet.create({
   },
   subTabBar: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
     paddingHorizontal: 12,
     paddingVertical: 8,
+    gap: 8,
+    backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#ffe0ea',
-    gap: 8,
   },
   subTabBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#fff0f3',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
     gap: 6,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#fff0f3',
   },
   subTabBtnActive: {
     backgroundColor: '#b3006c',
-    borderColor: '#b3006c',
   },
   subTabBtnText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: 'bold',
     color: '#5a3f49',
   },
   subTabBtnTextActive: {
     color: '#ffffff',
-    fontWeight: '800',
   },
-  mainScroll: {
+  editorContainer: {
     flex: 1,
-    padding: 12,
   },
   editingBanner: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff0f5',
-    borderColor: '#b3006c',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    alignItems: 'center',
+    backgroundColor: '#ffe8ee',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffd9e5',
   },
   editingBannerInfo: {
     flexDirection: 'row',
@@ -950,64 +815,40 @@ const styles = StyleSheet.create({
   },
   editingBannerText: {
     fontSize: 12,
-    color: '#27171d',
+    color: '#5a3f49',
   },
   boldText: {
-    fontWeight: '800',
+    fontWeight: 'bold',
     color: '#b3006c',
   },
   cancelEditBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#ffe8ee',
+    gap: 4,
+    backgroundColor: '#fff',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   cancelEditBtnText: {
     fontSize: 11,
     color: '#ba1a1a',
-    fontWeight: '700',
+    fontWeight: 'bold',
   },
   tableSelectorCard: {
     backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 10,
-  },
-  tableSelectorHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  tableSelectorTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  tableSelectorTitle: {
-    fontSize: 12,
-    color: '#5a3f49',
-    fontWeight: '600',
-  },
-  currentTableHighlight: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#b3006c',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffe0ea',
   },
   tableChipsRow: {
-    flexDirection: 'row',
+    paddingHorizontal: 12,
     gap: 6,
-    paddingBottom: 8,
   },
   tableChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: '#fff0f3',
     borderColor: '#ffe0ea',
     borderWidth: 1,
@@ -1017,346 +858,416 @@ const styles = StyleSheet.create({
     borderColor: '#b3006c',
   },
   tableChipText: {
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: '600',
     color: '#5a3f49',
-    fontWeight: '700',
   },
   tableChipTextActive: {
     color: '#ffffff',
-    fontWeight: '900',
-  },
-  customTableInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#fcf0f4',
-    paddingTop: 6,
-  },
-  customTableLabel: {
-    fontSize: 11,
-    color: '#8e6e79',
-    fontWeight: '600',
-  },
-  customTableInput: {
-    flex: 1,
-    fontSize: 12,
-    color: '#27171d',
-    backgroundColor: '#fff8f8',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    height: 32,
+    fontWeight: 'bold',
   },
   searchRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     gap: 8,
-    marginBottom: 10,
+    backgroundColor: '#ffffff',
   },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    height: 38,
-    gap: 6,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 12.5,
-    color: '#27171d',
-    paddingVertical: 0,
-  },
-  clearSearchText: {
-    color: '#8e6e79',
-    fontSize: 13,
-    paddingHorizontal: 4,
-  },
-  clearBtn: {
-    backgroundColor: '#ffe8ee',
-    borderColor: '#ffccd8',
-    borderWidth: 1,
-    borderRadius: 10,
-    height: 38,
-    width: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoriesBar: {
-    flexDirection: 'row',
-    gap: 6,
-    paddingBottom: 10,
-  },
-  categoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 16,
-    backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-  },
-  categoryChipActive: {
-    backgroundColor: '#b3006c',
-    borderColor: '#b3006c',
-  },
-  categoryChipText: {
-    fontSize: 11,
-    color: '#5a3f49',
-    fontWeight: '600',
-  },
-  categoryChipTextActive: {
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  productsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
-  },
-  productPill: {
-    width: '49%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  productPillActive: {
-    backgroundColor: '#fff0f5',
-    borderColor: '#b3006c',
-  },
-  productPillInfo: {
-    flex: 1,
-    marginRight: 4,
-  },
-  productPillName: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: '#27171d',
-  },
-  productPillNameActive: {
-    color: '#b3006c',
-  },
-  productPillPrice: {
-    fontSize: 10.5,
-    color: '#8e6e79',
-    marginTop: 1,
-  },
-  pillActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  pillQuick10Btn: {
     backgroundColor: '#fff0f3',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  pillQuick10Text: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#b3006c',
-  },
-  qtyBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#fff0f3',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  qtyBadgeActive: {
-    backgroundColor: '#b3006c',
-  },
-  qtyBadgeTextActive: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  pillModalBtn: {
-    padding: 3,
-    backgroundColor: '#fff0f3',
-    borderRadius: 6,
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-  },
-  orderCard: {
-    backgroundColor: '#ffffff',
     borderColor: '#ffe0ea',
     borderWidth: 1,
     borderRadius: 12,
-    padding: 12,
-    marginBottom: 30,
+    paddingHorizontal: 10,
+    height: 38,
   },
-  orderCardHeader: {
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#27171d',
+    marginLeft: 6,
+  },
+  clearSearchText: {
+    fontSize: 14,
+    color: '#8e6e79',
+    paddingHorizontal: 6,
+  },
+  extraButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#059669',
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    height: 38,
+  },
+  extraButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  categoriesBar: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffe0ea',
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#fff0f3',
+  },
+  categoryChipActive: {
+    backgroundColor: '#b3006c',
+  },
+  categoryChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5a3f49',
+  },
+  categoryChipTextActive: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  productsGridScroll: {
+    flex: 1,
+  },
+  productsGridContent: {
+    padding: 8,
+    paddingBottom: 160,
+  },
+  cardsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  productCard: {
+    width: '48.5%',
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 10,
+    marginBottom: 10,
+    borderColor: '#ffe0ea',
+    borderWidth: 1.5,
+    minHeight: 125,
+    justifyContent: 'space-between',
+    shadowColor: '#b3006c',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  productCardActive: {
+    borderColor: '#b3006c',
+    backgroundColor: '#fff8f9',
+  },
+  cardTop: {
+    flex: 1,
+  },
+  cardTitleWrap: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  cardProductName: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#27171d',
+    flex: 1,
+  },
+  qtyBadge: {
+    backgroundColor: '#b3006c',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  qtyBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  cardProductDesc: {
+    fontSize: 10,
+    color: '#8e6e79',
+    marginTop: 4,
+    lineHeight: 13,
+  },
+  comboChip: {
+    marginTop: 4,
+    backgroundColor: '#fff0f3',
+    borderColor: '#ffd9e5',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+  },
+  comboChipText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#b3006c',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#fff0f3',
+  },
+  cardPrice: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#b3006c',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cardMinusBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#fff0f3',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardPlusBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#b3006c',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomCartBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#ffe0ea',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  cartSummaryToggle: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cartTableLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#8e6e79',
+  },
+  cartTotalValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#b3006c',
+  },
+  cartExpandText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#b3006c',
+    backgroundColor: '#fff0f3',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  cartQuickActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  printOrderBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#5a3f49',
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  printOrderBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  payOrderBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#059669',
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  payOrderBtnDisabled: {
+    backgroundColor: '#a7f3d0',
+  },
+  payOrderBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  expandedCartOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(39, 27, 32, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  expandedCartCard: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    padding: 16,
+  },
+  expandedCartHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#ffe0ea',
-    paddingBottom: 8,
-    marginBottom: 8,
+    paddingBottom: 10,
   },
-  orderTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  orderCardTitle: {
-    fontSize: 12.5,
-    fontWeight: '800',
+  expandedCartTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: '#27171d',
   },
-  emptyCartBox: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  emptyCartHint: {
-    fontSize: 11.5,
-    color: '#8e6e79',
-    textAlign: 'center',
-  },
-  cartItemsList: {
-    gap: 8,
-  },
-  cartItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#f5f0f2',
-  },
-  cartItemDetails: {
-    flex: 1.2,
-  },
-  cartItemName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#27171d',
-  },
-  cartItemSub: {
-    fontSize: 10.5,
+  expandedCartSub: {
+    fontSize: 11,
     color: '#8e6e79',
   },
-  qtyControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#fff0f3',
-    borderRadius: 6,
-    padding: 2,
-    marginHorizontal: 4,
+  closeExpandedBtn: {
+    padding: 6,
   },
-  qtyStep10Btn: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+  expandedCartList: {
+    maxHeight: 280,
+    marginVertical: 10,
   },
-  qtyStep10Text: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    color: '#b3006c',
-  },
-  qtyBtn: {
-    padding: 3,
-  },
-  qtyCount: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#b3006c',
-    minWidth: 16,
-    textAlign: 'center',
-  },
-  itemTotalText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#27171d',
-    minWidth: 50,
-    textAlign: 'right',
-  },
-  deleteBtn: {
-    padding: 5,
-    marginLeft: 4,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#ffe0ea',
-    marginVertical: 8,
-  },
-  totalRow: {
+  expandedItemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#fff0f3',
   },
-  totalLabel: {
-    fontSize: 12.5,
-    fontWeight: '900',
+  expandedItemLeft: {
+    flex: 1,
+  },
+  expandedItemName: {
+    fontSize: 13,
+    fontWeight: 'bold',
     color: '#27171d',
-    letterSpacing: 0.3,
   },
-  totalAmount: {
-    fontSize: 18,
-    fontWeight: '900',
+  expandedItemNotes: {
+    fontSize: 11,
+    color: '#b3006c',
+    marginTop: 2,
+  },
+  expandedItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  expandedItemPrice: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#5a3f49',
+  },
+  removeItemBtn: {
+    padding: 4,
+  },
+  expandedCartFooter: {
+    borderTopWidth: 1,
+    borderTopColor: '#ffe0ea',
+    paddingTop: 12,
+  },
+  expandedTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  expandedTotalLabel: {
+    fontSize: 14,
+    color: '#5a3f49',
+    fontWeight: '600',
+  },
+  expandedTotalVal: {
+    fontSize: 22,
+    fontWeight: 'bold',
     color: '#b3006c',
   },
-  mainActionBtn: {
+  expandedActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  clearAllBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#b3006c',
-    borderRadius: 12,
+    gap: 4,
     paddingVertical: 12,
-    marginTop: 12,
-    gap: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ba1a1a',
   },
-  mainActionBtnText: {
+  clearAllBtnText: {
+    color: '#ba1a1a',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  expandedPayBtn: {
+    flex: 2,
+    backgroundColor: '#059669',
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  expandedPayBtnText: {
     color: '#ffffff',
-    fontSize: 12.5,
-    fontWeight: '900',
-    letterSpacing: 0.3,
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   historyScroll: {
     flex: 1,
-  },
-  historyContent: {
     padding: 12,
-    gap: 10,
-    paddingBottom: 30,
   },
-  emptyHistoryCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 24,
+  emptyHistoryBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
+    paddingVertical: 60,
   },
   emptyHistoryTitle: {
     fontSize: 16,
-    fontWeight: '800',
-    color: '#27171d',
+    fontWeight: 'bold',
+    color: '#5a3f49',
     marginTop: 12,
   },
   emptyHistoryText: {
@@ -1364,29 +1275,15 @@ const styles = StyleSheet.create({
     color: '#8e6e79',
     textAlign: 'center',
     marginTop: 6,
-    lineHeight: 18,
-  },
-  goToEditorBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#b3006c',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginTop: 16,
-  },
-  goToEditorBtnText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '800',
+    paddingHorizontal: 20,
   },
   historyCard: {
     backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
     borderColor: '#ffe0ea',
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
   },
   historyCardHeader: {
     flexDirection: 'row',
@@ -1397,373 +1294,130 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     marginBottom: 8,
   },
-  tableBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-  },
-  tableBadgeTakeout: {
-    backgroundColor: '#fff0f3',
-    borderColor: '#ffe0ea',
-  },
-  tableBadgeTable: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
-  },
-  tableBadgeText: {
-    fontSize: 11.5,
-    fontWeight: '900',
-  },
-  tableBadgeTextTakeout: {
-    color: '#b3006c',
-  },
-  tableBadgeTextTable: {
-    color: '#1d4ed8',
-  },
-  historyMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  historyTime: {
-    fontSize: 11,
-    color: '#8e6e79',
-    fontWeight: '600',
-  },
-  modifiedBadge: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  modifiedBadgeText: {
-    fontSize: 9.5,
-    color: '#92400e',
-    fontWeight: '700',
-  },
-  historyItemsList: {
-    gap: 4,
-    paddingVertical: 4,
-  },
-  historyItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  historyItemQty: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#b3006c',
-    width: 24,
-  },
-  historyItemName: {
-    flex: 1,
-    fontSize: 11.5,
+  historyTableNumber: {
+    fontSize: 13,
+    fontWeight: 'bold',
     color: '#27171d',
   },
-  historyItemPrice: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: '#5a3f49',
-  },
-  historyDivider: {
-    height: 1,
-    backgroundColor: '#ffe0ea',
-    marginVertical: 8,
-  },
-  historyFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  historyTotalContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-  },
-  historyTotalLabel: {
+  historyDate: {
     fontSize: 11,
     color: '#8e6e79',
-    fontWeight: '600',
   },
-  historyTotalValue: {
-    fontSize: 15,
-    fontWeight: '900',
+  historyTotal: {
+    fontSize: 16,
+    fontWeight: 'bold',
     color: '#b3006c',
+  },
+  historyItemsList: {
+    marginBottom: 10,
+  },
+  historyItemText: {
+    fontSize: 12,
+    color: '#5a3f49',
+    marginBottom: 2,
   },
   historyActionsRow: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
   },
   reprintBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
     backgroundColor: '#fff0f3',
-    borderColor: '#ffe0ea',
+    borderColor: '#b3006c',
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 10,
+    paddingVertical: 8,
   },
   reprintBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
     color: '#b3006c',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
-  editOrderBtn: {
+  editHistoryBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#b3006c',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  editOrderBtnText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  extraButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
     backgroundColor: '#b3006c',
     borderRadius: 10,
-    paddingHorizontal: 10,
     paddingVertical: 8,
   },
-  extraButtonText: {
+  editHistoryBtnText: {
     color: '#ffffff',
-    fontSize: 11.5,
-    fontWeight: 'bold',
-  },
-  cartActionButtonsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 6,
-  },
-  preTicketBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#fff0f3',
-    borderColor: '#e2bdc9',
-    borderWidth: 1.5,
-    borderRadius: 14,
-    paddingVertical: 12,
-  },
-  preTicketBtnText: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#5a3f49',
-  },
-  directPayBtn: {
-    flex: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#b3006c',
-    borderRadius: 14,
-    paddingVertical: 12,
-    shadowColor: '#b3006c',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 4,
-  },
-  directPayBtnText: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#ffffff',
-    letterSpacing: 0.5,
   },
   payModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(39, 23, 29, 0.65)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(39, 27, 32, 0.6)',
     alignItems: 'center',
-    padding: 16,
-  },
-  payModalContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    width: '100%',
-    maxWidth: 400,
+    justifyContent: 'center',
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 12,
+  },
+  payModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
   },
   payModalHeader: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ffe0ea',
-    paddingBottom: 10,
-    marginBottom: 14,
-  },
-  payModalTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    marginBottom: 12,
   },
   payModalTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#27171d',
   },
-  payModalCloseBtn: {
-    padding: 6,
-    borderRadius: 16,
-    backgroundColor: '#ffe8ee',
+  payModalTotal: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#059669',
+    marginVertical: 10,
   },
-  payTotalBox: {
-    backgroundColor: '#fff0f3',
-    borderColor: '#b3006c',
-    borderWidth: 1.5,
-    borderRadius: 16,
-    padding: 12,
-    alignItems: 'center',
-    marginBottom: 14,
+  payMethodLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#8e6e79',
+    marginTop: 8,
+    marginBottom: 12,
   },
-  payTotalLabel: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: '#5a3f49',
-    letterSpacing: 0.8,
-  },
-  payTotalAmount: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#b3006c',
-    marginTop: 2,
-  },
-  payMethodRow: {
+  payMethodsGrid: {
+    width: '100%',
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 14,
+    gap: 8,
   },
   payMethodBtn: {
     flex: 1,
-    flexDirection: 'row',
+    backgroundColor: '#fff0f3',
+    borderColor: '#ffe0ea',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    backgroundColor: '#fff8f8',
-    borderColor: '#e2bdc9',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 10,
+    gap: 6,
   },
   payMethodBtnActive: {
-    backgroundColor: '#b3006c',
-    borderColor: '#b3006c',
-  },
-  payMethodBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#5a3f49',
-  },
-  payMethodBtnTextActive: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  cashSection: {
-    marginBottom: 14,
-  },
-  cashSectionLabel: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: '#5a3f49',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-  },
-  cashInput: {
-    backgroundColor: '#fff8f8',
-    borderColor: '#b3006c',
-    borderWidth: 1.5,
-    borderRadius: 12,
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#b3006c',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    textAlign: 'center',
-  },
-  cashPresetsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 8,
-  },
-  cashPresetChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: '#ffd9e5',
-  },
-  cashPresetChipActive: {
-    backgroundColor: '#b3006c',
-  },
-  cashPresetChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#b3006c',
-  },
-  cashPresetChipTextActive: {
-    color: '#ffffff',
-  },
-  changeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#f0fdf4',
-    borderColor: '#86efac',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginTop: 10,
-  },
-  changeLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#166534',
-  },
-  changeValue: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#166534',
-  },
-  confirmPayBtn: {
     backgroundColor: '#059669',
-    borderRadius: 16,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 4,
+    borderColor: '#059669',
   },
-  confirmPayBtnText: {
-    fontSize: 13,
-    fontWeight: '900',
+  payMethodText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#5a3f49',
+  },
+  payMethodTextActive: {
     color: '#ffffff',
-    letterSpacing: 0.5,
   },
 });

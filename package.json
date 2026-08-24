@@ -11,6 +11,8 @@
     "start": "react-native start",
     "test": "jest",
     "build:apk": "cd android && ./gradlew assembleRelease",
+    "build:drive": "cd android && ./gradlew assembleRelease && cd .. && bash n8nInfrastructure/uploadToN8N.sh",
+    "upload:drive": "bash n8nInfrastructure/uploadToN8N.sh",
     "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
     "deploy": "cd android && ./gradlew assembleRelease && cd .. && adb install -r android/app/build/outputs/apk/release/app-release.apk"
   },
