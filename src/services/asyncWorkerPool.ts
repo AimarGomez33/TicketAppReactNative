@@ -1,6 +1,4 @@
 // src/services/asyncWorkerPool.ts
-import { InteractionManager } from 'react-native';
-
 export type TaskPriority = 'high' | 'normal' | 'background';
 
 export interface BackgroundTask {

@@ -53,7 +53,7 @@ export function StitchGalleryScreen() {
                   </View>
                 ) : (
                   <View style={styles.offlineBadge}>
-                    <Database size={9} color="#ba1a1a" style={{ marginRight: 3 }} />
+                    <Database size={9} color="#ba1a1a" style={styles.offlineBadgeIcon} />
                     <Text style={styles.offlineBadgeText}>LOCAL (CONFIGURAR)</Text>
                   </View>
                 )}
@@ -196,6 +196,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 5,
     paddingVertical: 1,
+  },
+  offlineBadgeIcon: {
+    marginRight: 3,
   },
   offlineBadgeText: {
     color: '#ba1a1a',

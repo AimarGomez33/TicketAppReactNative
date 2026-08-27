@@ -41,7 +41,7 @@ export function PaymentScreen() {
   // Local state - Nunca forzar modo automáticamente para no atrapar al cajero
   const [cashierMode, setCashierMode] = useState<CashierViewMode>('quick');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessing, _setIsProcessing] = useState(false);
 
   const total = getTotal();
   const items = Object.values(cart);
@@ -224,7 +224,7 @@ export function PaymentScreen() {
     });
 
     // 2. Impresión en segundo plano
-    void printTicketTCP(tableSnapshot, itemsSnapshot, totalSnapshot, {
+    printTicketTCP(tableSnapshot, itemsSnapshot, totalSnapshot, {
       showPrices: true,
       isKitchenComanda: false,
       paymentMethod: methodSnapshot,

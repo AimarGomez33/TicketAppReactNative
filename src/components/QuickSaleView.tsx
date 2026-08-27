@@ -24,17 +24,12 @@ import {
   Printer,
   Edit3,
   Clock,
-  FileText,
-  Layers,
   Zap,
   X,
-  ShoppingBag,
-  Hash,
   CircleDollarSign,
   CreditCard,
   Banknote,
   Send,
-  CheckCircle2,
 } from 'lucide-react-native';
 
 type SubViewTab = 'editor' | 'history';
@@ -46,7 +41,6 @@ export const QuickSaleView: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('Llevar');
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   // Modales
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
@@ -162,7 +156,7 @@ export const QuickSaleView: React.FC = () => {
     });
 
     // 2. Transmisión a impresora en background sin congelar la app
-    void printTicketTCP(currentTable, cartItems, total, {
+    printTicketTCP(currentTable, cartItems, total, {
       showPrices: true,
       paymentMethod: effectiveMethod,
     }).catch((err: any) => {
@@ -194,7 +188,7 @@ export const QuickSaleView: React.FC = () => {
         type: 'success',
       });
 
-      void printTicketTCP(currentTable, cartItems, total, {
+      printTicketTCP(currentTable, cartItems, total, {
         showPrices: true,
         isReprint: true,
       }).catch(err => console.warn(err));
@@ -207,7 +201,7 @@ export const QuickSaleView: React.FC = () => {
         type: 'success',
       });
 
-      void printTicketTCP(currentTable, cartItems, total, {
+      printTicketTCP(currentTable, cartItems, total, {
         showPrices: true,
       }).catch(err => console.warn(err));
     }

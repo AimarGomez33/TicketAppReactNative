@@ -82,7 +82,7 @@ export const CartSheet: React.FC = () => {
     });
 
     // 2. Impresión en segundo plano sin congelar la app
-    void printTicketTCP(tableSnapshot, itemsSnapshot, totalSnapshot, {
+    printTicketTCP(tableSnapshot, itemsSnapshot, totalSnapshot, {
       isKitchenComanda: true,
       showPrices: false,
       currentRound: roundToPrint,
