@@ -80,7 +80,7 @@ jobs:
       - name: 🚀 Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
           tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
           name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'TicketApp POS (Última Versión APK)' }}
           files: |
