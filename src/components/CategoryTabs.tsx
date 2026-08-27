@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { getCategoriesByMode, Category } from '../data/mockupMenu';
+import { Category } from '../store/useCartStore';
 import { useCartStore } from '../store/useCartStore';
 
 interface Props {
@@ -19,11 +19,8 @@ export const CategoryTabs: React.FC<Props> = ({
   selectedCategoryId,
   onSelectCategory,
 }) => {
-  const appMode = useCartStore(state => state.appMode);
   const menuCategories = useCartStore(state => state.menuCategories);
-  const categories = appMode === 'detailed'
-    ? getCategoriesByMode('detailed')
-    : (menuCategories && menuCategories.length > 0 ? menuCategories : getCategoriesByMode('general'));
+  const categories = menuCategories;
 
   return (
     <View style={styles.wrapper}>

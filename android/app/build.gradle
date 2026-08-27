@@ -128,3 +128,21 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// Hook automático: Al finalizar `./gradlew assembleRelease`, sube el APK a n8n y Google Drive
+tasks.matching { it.name == "assembleRelease" }.all { task ->
+    task.doLast {
+        def uploadScript = file("${rootDir}/../n8nInfrastructure/uploadToN8N.sh")
+        if (uploadScript.exists()) {
+            println "\n======================================================="
+            println "🚀 [Gradle Auto-Deploy] Subiendo APK generado a Google Drive via n8n..."
+            println "======================================================="
+            try {
+                def process = new ProcessBuilder("bash", uploadScript.absolutePath).inheritIO().start()
+                process.waitFor()
+            } catch (Exception e) {
+                println "Aviso en auto-deploy: " + e.message
+            }
+        }
+    }
+}

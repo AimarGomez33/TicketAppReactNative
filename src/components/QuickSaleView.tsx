@@ -13,10 +13,6 @@ import {
   useCartStore,
   Product,
 } from '../store/useCartStore';
-import {
-  CATEGORIES_GENERAL,
-  getProductsByMode,
-} from '../data/mockupMenu';
 import { printTicketTCP } from '../services/printerService';
 import { QuantityModal } from './QuantityModal';
 import { CustomExtraModal } from './CustomExtraModal';
@@ -47,7 +43,7 @@ const QUICK_TABLES = ['Llevar', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10
 
 export const QuickSaleView: React.FC = () => {
   const [subTab, setSubTab] = useState<SubViewTab>('editor');
-  const [selectedCategory, setSelectedCategory] = useState<string>('top');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTable, setSelectedTable] = useState<string>('Llevar');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -60,7 +56,6 @@ export const QuickSaleView: React.FC = () => {
   const [payMethod, setPayMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [isCartExpanded, setIsCartExpanded] = useState<boolean>(false);
 
-  const appMode = useCartStore((state) => state.appMode);
   const menuProducts = useCartStore((state) => state.menuProducts);
   const menuCategories = useCartStore((state) => state.menuCategories);
   const quickSaleCart = useCartStore((state) => state.quickSaleCart);
@@ -93,9 +88,7 @@ export const QuickSaleView: React.FC = () => {
 
   // Filtrado reactivo de productos del menú
   const availableProducts = useMemo(() => {
-    const products = appMode === 'detailed'
-      ? getProductsByMode('detailed')
-      : (menuProducts && menuProducts.length > 0 ? menuProducts : getProductsByMode('general'));
+    const products = menuProducts;
 
     return products.filter((p: Product) => {
       if (searchQuery.trim().length > 0) {
@@ -106,28 +99,10 @@ export const QuickSaleView: React.FC = () => {
         );
       }
 
-      if (selectedCategory === 'top') {
-        return [
-          'gen-chalupa',
-          'gen-quesadilla',
-          'gen-tostada',
-          'gen-pambazo-adob',
-          'gen-guajolota',
-          'gen-guajoloyet-adob',
-          'gen-pozole-grande',
-          'gen-taco',
-          'gen-burg-especial',
-          'gen-alitas-6',
-          'gen-papas-boneless',
-          'gen-refresco',
-          'gen-agua-500',
-        ].includes(p.id);
-      }
-
       if (selectedCategory === 'all') return true;
       return p.category === selectedCategory;
     });
-  }, [appMode, menuProducts, searchQuery, selectedCategory]);
+  }, [menuProducts, searchQuery, selectedCategory]);
 
   const openQuantityModal = (product: Product) => {
     setModalProduct(product);
@@ -249,7 +224,7 @@ export const QuickSaleView: React.FC = () => {
     setSelectedTable('Llevar');
   };
 
-  const categoriesToUse = (menuCategories && menuCategories.length > 0 ? menuCategories : CATEGORIES_GENERAL);
+  const categoriesToUse = menuCategories;
 
   return (
     <View style={styles.container}>
@@ -358,65 +333,50 @@ export const QuickSaleView: React.FC = () => {
 
           {/* Categorías (Chips Amplios) */}
           {searchQuery.length === 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.categoriesBar}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.categoryChip,
-                  selectedCategory === 'top' && styles.categoryChipActive,
-                ]}
-                onPress={() => setSelectedCategory('top')}
+            <View style={styles.categoriesWrapper}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoriesBar}
               >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    selectedCategory === 'top' && styles.categoryChipTextActive,
-                  ]}
-                >
-                  Populares
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.categoryChip,
-                  selectedCategory === 'all' && styles.categoryChipActive,
-                ]}
-                onPress={() => setSelectedCategory('all')}
-              >
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    selectedCategory === 'all' && styles.categoryChipTextActive,
-                  ]}
-                >
-                  Todos
-                </Text>
-              </TouchableOpacity>
-
-              {categoriesToUse.filter(c => c.id !== 'top').map((cat) => (
                 <TouchableOpacity
-                  key={cat.id}
                   style={[
                     styles.categoryChip,
-                    selectedCategory === cat.id && styles.categoryChipActive,
+                    selectedCategory === 'all' && styles.categoryChipActive,
                   ]}
-                  onPress={() => setSelectedCategory(cat.id)}
+                  onPress={() => setSelectedCategory('all')}
                 >
                   <Text
                     style={[
                       styles.categoryChipText,
-                      selectedCategory === cat.id && styles.categoryChipTextActive,
+                      selectedCategory === 'all' && styles.categoryChipTextActive,
                     ]}
                   >
-                    {cat.name}
+                    Todos
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+
+                {categoriesToUse.map((cat) => (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[
+                      styles.categoryChip,
+                      selectedCategory === cat.id && styles.categoryChipActive,
+                    ]}
+                    onPress={() => setSelectedCategory(cat.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        selectedCategory === cat.id && styles.categoryChipTextActive,
+                      ]}
+                    >
+                      {cat.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
           )}
 
           {/* Grilla Amplia de Platillos (Exactamente igual de espaciosa que el menú de mesas) */}
@@ -429,8 +389,6 @@ export const QuickSaleView: React.FC = () => {
               {availableProducts.map((product) => {
                 const currentItem = quickSaleCart[product.id];
                 const qty = currentItem ? currentItem.quantity : 0;
-                const isBurgerOrWings = product.category === 'hamburguesas' || product.category === 'alitas';
-
                 return (
                   <TouchableOpacity
                     key={product.id}
@@ -456,11 +414,6 @@ export const QuickSaleView: React.FC = () => {
                         </Text>
                       ) : null}
 
-                      {isBurgerOrWings && (
-                        <View style={styles.comboChip}>
-                          <Text style={styles.comboChipText}>Combo Papas +$30</Text>
-                        </View>
-                      )}
                     </View>
 
                     <View style={styles.cardFooter}>
@@ -836,22 +789,26 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   tableSelectorCard: {
+    height: 46,
     backgroundColor: '#ffffff',
-    paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#ffe0ea',
+    justifyContent: 'center',
   },
   tableChipsRow: {
     paddingHorizontal: 12,
+    alignItems: 'center',
     gap: 6,
   },
   tableChip: {
+    height: 32,
     paddingHorizontal: 12,
-    paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: '#fff0f3',
     borderColor: '#ffe0ea',
     borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tableChipActive: {
     backgroundColor: '#b3006c',
@@ -909,19 +866,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  categoriesBar: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 6,
+  categoriesWrapper: {
+    height: 46,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#ffe0ea',
+    justifyContent: 'center',
+  },
+  categoriesBar: {
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 8,
   },
   categoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    height: 32,
+    paddingHorizontal: 14,
+    borderRadius: 16,
     backgroundColor: '#fff0f3',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   categoryChipActive: {
     backgroundColor: '#b3006c',

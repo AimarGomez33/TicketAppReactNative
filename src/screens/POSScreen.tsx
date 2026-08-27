@@ -11,20 +11,16 @@ import { HeaderBar } from '../components/HeaderBar';
 import { CategoryTabs } from '../components/CategoryTabs';
 import { ProductCard } from '../components/ProductCard';
 import { CartSheet } from '../components/CartSheet';
-import { getProductsByMode } from '../data/mockupMenu';
 import { Product, useCartStore } from '../store/useCartStore';
 
 export const POSScreen: React.FC = () => {
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('top');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const appMode = useCartStore(state => state.appMode);
   const menuProducts = useCartStore(state => state.menuProducts);
 
   // Filtrado reactivo instantáneo por categoría, modo de app y live search
   const filteredProducts = useMemo(() => {
-    const products = appMode === 'detailed'
-      ? getProductsByMode('detailed')
-      : (menuProducts && menuProducts.length > 0 ? menuProducts : getProductsByMode('general'));
+    const products = menuProducts;
 
     return products.filter((product: Product) => {
       // Si hay texto de búsqueda, busca en nombre y descripción
@@ -37,27 +33,9 @@ export const POSScreen: React.FC = () => {
       }
 
       // Filtro por categoría seleccionada
-      if (selectedCategoryId === 'top') {
-        return [
-          'gen-chalupa',
-          'gen-quesadilla',
-          'gen-tostada',
-          'gen-pambazo-adob',
-          'gen-guajolota',
-          'gen-guajoloyet-adob',
-          'gen-pozole-grande',
-          'gen-taco',
-          'gen-burg-especial',
-          'gen-alitas-6',
-          'gen-papas-boneless',
-          'gen-refresco',
-          'gen-agua-500',
-        ].includes(product.id);
-      }
-
-      return product.category === selectedCategoryId;
+      return !selectedCategoryId || product.category === selectedCategoryId;
     });
-  }, [appMode, menuProducts, selectedCategoryId, searchQuery]);
+  }, [menuProducts, selectedCategoryId, searchQuery]);
 
   return (
     <View style={styles.container}>
@@ -89,7 +67,7 @@ export const POSScreen: React.FC = () => {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
-                No se encontraron platillos coincidentes.
+                No hay platillos disponibles. Verifica la conexión y el catálogo en Supabase.
               </Text>
             </View>
           }

@@ -15,7 +15,10 @@ import {
   ShoppingBag,
   CreditCard,
   BellRing,
+  Database,
+  Settings,
 } from 'lucide-react-native';
+import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
 
 const STATUS_LABELS: Record<TableStatus, string> = {
   free: 'Disponible',
@@ -70,8 +73,10 @@ export function TablesScreen() {
   const setActiveTab = useCartStore(state => state.setActiveTab);
   const clearCart = useCartStore(state => state.clearCart);
   const showCustomAlert = useCartStore(state => state.showCustomAlert);
+  const isRealtimeConnected = useCartStore(state => state.isRealtimeConnected);
 
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [configModalVisible, setConfigModalVisible] = useState(false);
 
   const handleSelectTable = (tableId: string) => {
     setSelectedTable(tableId === selectedTable ? null : tableId);
@@ -133,7 +138,6 @@ export function TablesScreen() {
     const status = tableOrder?.status || 'free';
     const cartItems = tableOrder?.cart ? Object.values(tableOrder.cart) : [];
     const isSelected = selectedTable === tableId;
-    const isBillRequested = status === 'bill_requested';
 
     const total = cartItems.reduce(
       (sum, item) => sum + item.product.price * item.quantity,
@@ -147,7 +151,6 @@ export function TablesScreen() {
           styles.tableCard,
           getCardStatusStyle(status),
           isSelected && styles.selectedCard,
-          isBillRequested && styles.billRequestedCardPulse,
         ]}
         onPress={() => handleSelectTable(tableId)}
         activeOpacity={0.7}
@@ -194,9 +197,10 @@ export function TablesScreen() {
   const getSelectedTableSummary = () => {
     if (!selectedTable) return null;
     const tableOrder = tables[selectedTable];
-    const cartItems = tableOrder?.cart ? Object.values(tableOrder.cart) : [];
     const status = tableOrder?.status || 'free';
+    const cartItems = tableOrder?.cart ? Object.values(tableOrder.cart) : [];
     const isBillRequested = status === 'bill_requested';
+
     const total = cartItems.reduce(
       (sum, item) => sum + item.product.price * item.quantity,
       0
@@ -225,7 +229,7 @@ export function TablesScreen() {
         </View>
 
         {cartItems.length > 0 ? (
-          <ScrollView style={styles.itemsSummaryList} nestedScrollEnabled>
+          <ScrollView style={styles.itemsSummaryList} nestedScrollEnabled showsVerticalScrollIndicator={false}>
             {cartItems.map(item => (
               <View key={item.product.id} style={styles.summaryItemRow}>
                 <Text style={styles.summaryItemName}>
@@ -292,6 +296,41 @@ export function TablesScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Top Header con Acceso Directo a Supabase */}
+      <View style={styles.topHeader}>
+        <View>
+          <Text style={styles.appHeaderTitle}>Mesas y Comandas</Text>
+          <Text style={styles.appHeaderSubtitle}>TicketApp POS</Text>
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.supabaseStatusBtn,
+            isRealtimeConnected ? styles.supabaseStatusBtnConnected : styles.supabaseStatusBtnOffline,
+          ]}
+          onPress={() => setConfigModalVisible(true)}
+          activeOpacity={0.7}
+        >
+          <Database size={15} color={isRealtimeConnected ? '#059669' : '#ba1a1a'} />
+          <Text style={[styles.supabaseStatusText, isRealtimeConnected ? styles.supabaseTextConnected : styles.supabaseTextOffline]}>
+            {isRealtimeConnected ? 'Supabase En Vivo' : 'Configurar Supabase'}
+          </Text>
+          <Settings size={14} color={isRealtimeConnected ? '#059669' : '#ba1a1a'} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Banner si está desconectado */}
+      {!isRealtimeConnected && (
+        <TouchableOpacity
+          style={styles.offlineBanner}
+          onPress={() => setConfigModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.offlineBannerText}>
+            ⚡ Modo Local (Offline) • Toca aquí para introducir credenciales de Supabase
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* Indicadores de Leyenda */}
       <View style={styles.legendContainer}>
         <View style={styles.legendItem}>
@@ -336,6 +375,12 @@ export function TablesScreen() {
 
       {/* Panel Detallado */}
       {selectedTable && getSelectedTableSummary()}
+
+      {/* Modal de Configuración Supabase */}
+      <SupabaseConfigModal
+        visible={configModalVisible}
+        onClose={() => setConfigModalVisible(false)}
+      />
     </View>
   );
 }
@@ -344,6 +389,61 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff8f8',
+  },
+  topHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  appHeaderTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#27171d',
+  },
+  appHeaderSubtitle: {
+    fontSize: 12,
+    color: '#8e6e79',
+  },
+  supabaseStatusBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  supabaseStatusBtnConnected: {
+    backgroundColor: '#dcfce7',
+  },
+  supabaseStatusBtnOffline: {
+    backgroundColor: '#fee2e2',
+  },
+  supabaseStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  supabaseTextConnected: {
+    color: '#059669',
+  },
+  supabaseTextOffline: {
+    color: '#ba1a1a',
+  },
+  offlineBanner: {
+    backgroundColor: '#991b1b',
+    padding: 8,
+    marginHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 4,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  offlineBannerText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   legendContainer: {
     flexDirection: 'row',

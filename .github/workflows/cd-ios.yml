@@ -44,20 +44,6 @@ jobs:
           ruby-version: '3.3'
           bundler-cache: true
 
-      - name: 🔑 Inject Environment Variables (.env)
-        env:
-          SUPABASE_URL_PROD: ${{ secrets.SUPABASE_URL_PROD || secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY_PROD: ${{ secrets.SUPABASE_ANON_KEY_PROD || secrets.SUPABASE_ANON_KEY }}
-          RESTAURANT_NAME: ${{ secrets.RESTAURANT_NAME }}
-          PRINTER_HOST: ${{ secrets.PRINTER_HOST }}
-          PRINTER_PORT: ${{ secrets.PRINTER_PORT }}
-        run: |
-          echo "SUPABASE_URL=${SUPABASE_URL_PROD}" >> .env
-          echo "SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY_PROD}" >> .env
-          echo "RESTAURANT_NAME=\"${RESTAURANT_NAME:-Ticket App POS}\"" >> .env
-          echo "PRINTER_HOST=${PRINTER_HOST:-192.168.1.200}" >> .env
-          echo "PRINTER_PORT=${PRINTER_PORT:-9100}" >> .env
-
       - name: 🍎 Install CocoaPods Dependencies
         working-directory: ios
         run: |

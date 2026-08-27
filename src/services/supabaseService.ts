@@ -6,6 +6,7 @@ import { CartItem, TableStatus, Product, Category } from '../store/useCartStore'
 
 let supabaseClient: SupabaseClient | null = null;
 let realtimeChannel: RealtimeChannel | null = null;
+let sessionInitialization: Promise<boolean> | null = null;
 
 export const getSupabase = (): SupabaseClient | null => {
   if (!isSupabaseConfigured()) {
@@ -24,6 +25,25 @@ export const getSupabase = (): SupabaseClient | null => {
     });
   }
   return supabaseClient;
+};
+
+export const ensureSupabaseSession = async (): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  if (sessionInitialization) return sessionInitialization;
+
+  sessionInitialization = (async () => {
+    const { data, error: sessionError } = await supabase.auth.getSession();
+    if (!sessionError && data.session) return true;
+
+    const { error } = await supabase.auth.signInAnonymously();
+    if (error) {
+      console.warn('No se pudo crear sesión anónima de Supabase:', error.message);
+      return false;
+    }
+    return true;
+  })();
+  return sessionInitialization;
 };
 
 export interface RemoteTableUpdate {
@@ -93,7 +113,11 @@ export const fetchActiveOrderItems = async (tableNumber: string): Promise<{ item
       .limit(1)
       .maybeSingle();
 
-    if (orderError || !orderData) {
+    if (orderError) {
+      console.warn('Error fetching active order:', orderError.message);
+      return null;
+    }
+    if (!orderData) {
       return { items: [] };
     }
 
@@ -104,7 +128,11 @@ export const fetchActiveOrderItems = async (tableNumber: string): Promise<{ item
       .eq('order_id', orderData.id)
       .order('created_at', { ascending: true });
 
-    if (itemsError || !itemsData) {
+    if (itemsError) {
+      console.warn('Error fetching order items:', itemsError.message);
+      return null;
+    }
+    if (!itemsData) {
       return { items: [], orderId: orderData.id };
     }
 
@@ -114,6 +142,7 @@ export const fetchActiveOrderItems = async (tableNumber: string): Promise<{ item
         name: row.product_name,
         price: Number(row.price),
         category: row.category || 'general',
+        kitchenStation: row.kitchen_station || 'station_a',
       },
       quantity: row.quantity,
       notes: row.notes || '',
@@ -182,6 +211,7 @@ export const syncActiveOrderToSupabase = async (
         product_id: item.product.id,
         product_name: item.product.name,
         category: item.product.category,
+        kitchen_station: item.product.kitchenStation || 'station_a',
         price: item.product.price,
         quantity: item.quantity,
         notes: item.notes || '',
@@ -190,15 +220,17 @@ export const syncActiveOrderToSupabase = async (
       }));
 
       // Limpiamos los ítems anteriores de la orden para evitar duplicados y volvemos a insertar
-      await supabase.from('order_items').delete().eq('order_id', orderId);
-      await supabase.from('order_items').insert(rows);
+      const { error: deleteError } = await supabase.from('order_items').delete().eq('order_id', orderId);
+      if (deleteError) throw deleteError;
+      const { error: insertError } = await supabase.from('order_items').insert(rows);
+      if (insertError) throw insertError;
     }
 
     // 3. Actualizar estado de la mesa
     const hasItems = items.length > 0;
     const tableStatus: TableStatus = hasItems ? 'busy' : 'free';
     
-    await supabase
+    const { error: tableError } = await supabase
       .from('tables_state')
       .upsert({
         table_number: tableNumber,
@@ -207,6 +239,7 @@ export const syncActiveOrderToSupabase = async (
         waiter_name: waiterName,
         active_order_id: orderId || null,
       });
+    if (tableError) throw tableError;
 
     return orderId;
   } catch (err) {
@@ -275,6 +308,59 @@ export const requestBillInSupabase = async (tableNumber: string): Promise<boolea
     return !error;
   } catch (err) {
     console.warn('Error requesting bill in Supabase:', err);
+    return false;
+  }
+};
+
+/** Actualiza estados operativos de mesa que no se deducen del carrito. */
+export const updateTableStatusInSupabase = async (
+  tableNumber: string,
+  status: TableStatus,
+): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase || !tableNumber) return false;
+
+  try {
+    const { error } = await supabase
+      .from('tables_state')
+      .upsert({
+        table_number: tableNumber,
+        status,
+        last_updated: new Date().toISOString(),
+      });
+    return !error;
+  } catch (err) {
+    console.warn('Error updating table status in Supabase:', err);
+    return false;
+  }
+};
+
+/** Persiste el avance de cocina; el broadcast sólo sirve como acelerador UI. */
+export const updateOrderItemStatusInSupabase = async (
+  tableNumber: string,
+  productId: string,
+  status: 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready',
+): Promise<boolean> => {
+  const supabase = getSupabase();
+  if (!supabase || !tableNumber || !productId) return false;
+
+  try {
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('table_number', tableNumber)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (orderError || !order) return false;
+
+    const { error } = await supabase
+      .from('order_items')
+      .update({ status })
+      .eq('order_id', order.id)
+      .eq('product_id', productId);
+    return !error;
+  } catch (err) {
+    console.warn('Error updating kitchen item in Supabase:', err);
     return false;
   }
 };
@@ -444,6 +530,7 @@ export const reinitializeSupabaseClient = () => {
     realtimeChannel = null;
   }
   supabaseClient = null;
+  sessionInitialization = null;
 };
 
 export const broadcastTableState = async (payload: BroadcastTableStatePayload) => {
@@ -486,7 +573,9 @@ export const subscribeToRealtimeChanges = (
   onOrderChange?: (order: RemoteOrderUpdate) => void,
   onMenuChange?: () => void,
   onTableCartSync?: (payload: BroadcastTableStatePayload) => void,
-  onKitchenStatusSync?: (payload: BroadcastKitchenStatusPayload) => void
+  onKitchenStatusSync?: (payload: BroadcastKitchenStatusPayload) => void,
+  onOrderItemsChange?: (tableNumber: string) => void,
+  onConnectionChange?: (connected: boolean) => void,
 ): (() => void) => {
   const supabase = getSupabase();
   if (!supabase) {
@@ -522,6 +611,16 @@ export const subscribeToRealtimeChanges = (
           });
         }
       }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'order_items' },
+      (payload) => {
+        const row = payload.new as any;
+        const oldRow = payload.old as any;
+        const tableNumber = row?.table_number || oldRow?.table_number;
+        if (tableNumber && onOrderItemsChange) onOrderItemsChange(tableNumber);
+      },
     )
     .on(
       'postgres_changes',
@@ -563,7 +662,11 @@ export const subscribeToRealtimeChanges = (
         onKitchenStatusSync(payload as BroadcastKitchenStatusPayload);
       }
     })
-    .subscribe();
+    .subscribe((status) => {
+      // "Conectado" significa que el canal Realtime confirmó SUBSCRIBED,
+      // no sólo que una consulta HTTP de mesas respondió.
+      if (onConnectionChange) onConnectionChange(status === 'SUBSCRIBED');
+    });
 
   return () => {
     if (realtimeChannel && supabase) {

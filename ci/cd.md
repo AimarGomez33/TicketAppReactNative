@@ -31,31 +31,20 @@ Se ejecuta al mergear en ramas productivas o generar etiquetas de versión (`git
 ## 3. Gestión de Secretos y Configuración con Supabase
 
 ### 3.1. Clasificación y Seguridad de Claves
-* **`SUPABASE_URL`:** URL del proyecto (pública en el cliente).
-* **`SUPABASE_ANON_KEY`:** Clave pública anonimizada (Publishable Key). Se incluye en la app cliente para autorizar el tráfico. Toda la seguridad de datos descansa en **Row Level Security (RLS)** dentro de la base de datos de Supabase.
-* **`SUPABASE_SERVICE_ROLE_KEY`:** Clave con privilegios de superusuario que bypass-ea todas las políticas RLS. **Nunca debe incluirse en la app de React Native ni en los secretos del repositorio móvil.**
+* **URL y publishable key:** se capturan en tiempo de ejecución desde la configuración de cada terminal. No se inyectan durante la compilación ni se incluyen en la APK.
+* **`SUPABASE_SERVICE_ROLE_KEY`:** clave de superusuario. Debe permanecer exclusivamente en un backend/Edge Function; nunca en la app, repositorio ni CI móvil.
 
 ### 3.2. Configuración en el Gestor de CI/CD (GitHub Secrets)
 Se configuran como variables protegidas separadas por entorno:
 
 | Nombre del Secreto | Descripción | Entorno |
 | :--- | :--- | :--- |
-| `SUPABASE_URL_PROD` | URL del proyecto Supabase de producción | Producción |
-| `SUPABASE_ANON_KEY_PROD` | Anon Key de Supabase de producción | Producción |
-| `SUPABASE_URL_STAGING` | URL del proyecto Supabase de staging | Staging |
-| `SUPABASE_ANON_KEY_STAGING` | Anon Key de Supabase de staging | Staging |
 | `ANDROID_KEYSTORE_BASE64` | Archivo `.keystore` codificado en base64 | Producción/Staging |
 | `ANDROID_KEYSTORE_PASSWORD` | Contraseña del Keystore | Producción/Staging |
 | `ANDROID_KEY_ALIAS` | Alias de la llave privada | Producción/Staging |
 | `ANDROID_KEY_PASSWORD` | Contraseña de la llave privada | Producción/Staging |
 | `APP_STORE_CONNECT_KEY_CONTENT`| Llave privada AuthKey (`.p8`) de Apple | Producción/Staging |
 
-### 3.3. Inyección de Variables en Tiempo de Compilación (*Build-Time*)
+### 3.3. Configuración de terminal
 
-#### En React Native CLI (con `react-native-config` / `dotenv`):
-En el pipeline de GitHub Actions, antes de compilar:
-```yaml
-- name: Inject Environment Variables
-  run: |
-    echo "SUPABASE_URL=${{ secrets.SUPABASE_URL_PROD }}" >> .env
-    echo "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY_PROD }}" >> .env
+La APK se distribuye sin configuración de Supabase. Cada terminal recibe URL y publishable key mediante el modal de configuración. Protege los datos con RLS basado en identidad o con un backend/Edge Function; una publishable key no es un secreto.

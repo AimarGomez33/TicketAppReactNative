@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS menu_products (
   price NUMERIC(10,2) NOT NULL DEFAULT 0,
   category_id VARCHAR(50) REFERENCES menu_categories(id) ON DELETE SET NULL,
   description TEXT DEFAULT '',
-  kitchen_station VARCHAR(50) DEFAULT 'mexican', -- 'mexican' | 'american_tacos'
+  kitchen_station VARCHAR(50) DEFAULT 'station_a', -- 'station_a' | 'station_b'
   is_custom_price BOOLEAN NOT NULL DEFAULT false, -- True para extras con precio abierto
   is_active BOOLEAN NOT NULL DEFAULT true,
   sort_order INT NOT NULL DEFAULT 0,
@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   product_id VARCHAR(50) NOT NULL,
   product_name VARCHAR(100) NOT NULL,
   category VARCHAR(50),
+  kitchen_station VARCHAR(50) DEFAULT 'station_a',
   price NUMERIC(10,2) NOT NULL,
   quantity INT NOT NULL DEFAULT 1,
   notes TEXT DEFAULT '',
@@ -86,9 +87,9 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO menu_products (id, name, price, category_id, description, kitchen_station, is_custom_price, sort_order)
 VALUES
-  ('demo-prod-1', 'Platillo Ejemplo 1', 50.00, 'demo-cat-1', 'Descripción de muestra', 'mexican', false, 1),
-  ('demo-prod-2', 'Bebida Ejemplo', 25.00, 'demo-cat-2', 'Bebida de muestra', 'mexican', false, 2),
-  ('ext-personalizado', 'Extra Personalizado', 0.00, 'extras', 'Monto y concepto libre definido por el operador', 'mexican', true, 3)
+  ('demo-prod-1', 'Producto de ejemplo 1', 50.00, 'demo-cat-1', 'Descripción de muestra', 'station_a', false, 1),
+  ('demo-prod-2', 'Producto de ejemplo 2', 25.00, 'demo-cat-2', 'Descripción de muestra', 'station_a', false, 2),
+  ('ext-personalizado', 'Concepto personalizado', 0.00, 'extras', 'Monto y concepto libre definido por el operador', 'station_a', true, 3)
 ON CONFLICT (id) DO NOTHING;
 
 -- ==============================================================================
@@ -122,6 +123,42 @@ BEGIN
   END;
 END $$;
 
+-- Los precios de órdenes activas se recalculan desde el catálogo central.
+-- Las órdenes pagadas conservan su precio histórico.
+CREATE OR REPLACE FUNCTION refresh_active_orders_after_product_price_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.price IS NOT DISTINCT FROM OLD.price THEN
+    RETURN NEW;
+  END IF;
+
+  UPDATE order_items AS item
+  SET price = NEW.price
+  FROM orders AS order_header
+  WHERE item.order_id = order_header.id
+    AND order_header.status = 'active'
+    AND item.product_id = NEW.id;
+
+  UPDATE orders AS order_header
+  SET total = COALESCE((
+    SELECT SUM(item.price * item.quantity)
+    FROM order_items AS item
+    WHERE item.order_id = order_header.id
+  ), 0)
+  WHERE order_header.status = 'active';
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS menu_product_price_updates_active_orders ON menu_products;
+CREATE TRIGGER menu_product_price_updates_active_orders
+AFTER UPDATE OF price ON menu_products
+FOR EACH ROW
+EXECUTE FUNCTION refresh_active_orders_after_product_price_change();
+
 -- ==============================================================================
 -- 7. Políticas de Acceso RLS
 -- ==============================================================================
@@ -130,6 +167,14 @@ ALTER TABLE menu_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tables_state ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+
+-- Entrega a Realtime el valor anterior y nuevo en UPDATE/DELETE. Es esencial
+-- para que todas las terminales puedan reconciliar comandas sin estado local.
+ALTER TABLE menu_categories REPLICA IDENTITY FULL;
+ALTER TABLE menu_products REPLICA IDENTITY FULL;
+ALTER TABLE tables_state REPLICA IDENTITY FULL;
+ALTER TABLE orders REPLICA IDENTITY FULL;
+ALTER TABLE order_items REPLICA IDENTITY FULL;
 
 DROP POLICY IF EXISTS "Permitir todo en menu_categories para anon" ON menu_categories;
 CREATE POLICY "Permitir todo en menu_categories para anon" ON menu_categories

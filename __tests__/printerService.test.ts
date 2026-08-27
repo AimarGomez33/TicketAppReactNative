@@ -1,33 +1,25 @@
-// __tests__/printerService.test.ts
-import { printTicketTCP, generateEscPosBuffer } from '../src/services/printerService';
-import { MOCK_PRODUCTS_GENERAL } from '../src/data/mockupMenu';
-import { CartItem } from '../src/store/useCartStore';
+import { printTicketTCP, generateEscPosBuffer, sanitizeEscPosText } from '../src/services/printerService';
+import { CartItem, Product } from '../src/store/useCartStore';
 
-describe('printerService - Ticket Generation and Single Print Execution', () => {
-  const chalupa = MOCK_PRODUCTS_GENERAL.find((p) => p.id === 'gen-chalupa')!;
-  const mockItems: CartItem[] = [
-    {
-      product: chalupa,
-      quantity: 5,
-      notes: 'salsa verde aparte',
-      status: 'pending',
-      round: 1,
-    },
-  ];
+const productA: Product = { id: 'product-a', name: 'Producto A', price: 10, category: 'category-a', kitchenStation: 'station_a' };
+const productB: Product = { id: 'product-b', name: 'Producto B', price: 20, category: 'category-b', kitchenStation: 'station_b' };
+const items: CartItem[] = [
+  { product: productA, quantity: 2, notes: 'nota de prueba', status: 'pending', round: 1 },
+  { product: productB, quantity: 1, status: 'pending', round: 1 },
+];
 
-  test('Debe generar el buffer ESC/POS con el encabezado adecuado para mesa y para llevar', () => {
-    const bufferLlevar = generateEscPosBuffer('Llevar', mockItems, 30.0, { showPrices: true });
-    expect(bufferLlevar.length).toBeGreaterThan(0);
-
-    const bufferMesa = generateEscPosBuffer('4', mockItems, 30.0, { showPrices: true });
-    expect(bufferMesa.length).toBeGreaterThan(0);
-
-    const bufferCocina = generateEscPosBuffer('4', mockItems, 30.0, { isKitchenComanda: true, station: 'mexican' });
-    expect(bufferCocina.length).toBeGreaterThan(0);
+describe('printerService', () => {
+  test('sanitiza caracteres no compatibles con ESC/POS', () => {
+    expect(sanitizeEscPosText('Artículo con Piñón ¡Mesa!')).toBe('Articulo con Pinon Mesa!');
   });
 
-  test('Debe ejecutar la impresión una única vez sin generar duplicados', async () => {
-    const result = await printTicketTCP('Llevar', mockItems, 30.0, { showPrices: true });
-    expect(result).toBe(true);
+  test('genera tickets de cliente y cocina por estación', () => {
+    expect(generateEscPosBuffer('3', items, 40, { showPrices: true }).length).toBeGreaterThan(50);
+    expect(generateEscPosBuffer('3', items, 0, { isKitchenComanda: true, station: 'station_a' }).length).toBeGreaterThan(30);
+    expect(generateEscPosBuffer('3', items, 0, { isKitchenComanda: true, station: 'station_b' }).length).toBeGreaterThan(30);
+  });
+
+  test('envía el ticket por la cola TCP', async () => {
+    await expect(printTicketTCP('Llevar', items, 40, { showPrices: true })).resolves.toBe(true);
   });
 });

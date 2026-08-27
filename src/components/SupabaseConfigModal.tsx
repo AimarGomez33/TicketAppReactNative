@@ -1,5 +1,5 @@
 // src/components/SupabaseConfigModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { Database, X, Check, Globe, KeyRound, Radio } from 'lucide-react-native';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
@@ -22,12 +23,41 @@ interface Props {
 }
 
 export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
+  const scrollViewRef = useRef<ScrollView>(null);
   const isRealtimeConnected = useCartStore(state => state.isRealtimeConnected);
   const showCustomAlert = useCartStore(state => state.showCustomAlert);
   const initRealtimeSync = useCartStore(state => state.initRealtimeSync);
 
   const [url, setUrl] = useState(SUPABASE_CONFIG.url);
   const [anonKey, setAnonKey] = useState(SUPABASE_CONFIG.anonKey);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setUrl(SUPABASE_CONFIG.url);
+      setAnonKey(SUPABASE_CONFIG.anonKey);
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setIsKeyboardVisible(true);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setIsKeyboardVisible(false);
+      }
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const handleSave = () => {
     SUPABASE_CONFIG.url = url.trim();
@@ -53,10 +83,10 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        style={styles.overlay}
+        style={[styles.overlay, isKeyboardVisible && styles.overlayKeyboardActive]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View style={styles.card}>
+        <View style={[styles.card, isKeyboardVisible && styles.cardKeyboardActive]}>
           <View style={styles.header}>
             <View style={styles.titleRow}>
               <Database size={20} color="#b3006c" />
@@ -67,7 +97,12 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView 
+            ref={scrollViewRef}
+            showsVerticalScrollIndicator={false} 
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={[styles.scrollContent, isKeyboardVisible && styles.scrollContentKeyboardActive]}
+          >
             <View style={styles.statusBox}>
               <Text style={styles.statusLabel}>Estado de Sincronización:</Text>
               <View style={[styles.statusBadge, isRealtimeConnected ? styles.statusBadgeConnected : styles.statusBadgeOffline]}>
@@ -88,6 +123,10 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
                 placeholder="https://xyzcompany.supabase.co"
                 placeholderTextColor="#8e6e79"
                 autoCapitalize="none"
+                autoCorrect={false}
+                onFocus={() => {
+                  setTimeout(() => scrollViewRef.current?.scrollTo({ y: 0, animated: true }), 100);
+                }}
               />
             </View>
 
@@ -101,7 +140,10 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
                 placeholder="eyJhbGciOiJIUzI1NiIsIn..."
                 placeholderTextColor="#8e6e79"
                 autoCapitalize="none"
-                secureTextEntry
+                autoCorrect={false}
+                onFocus={() => {
+                  setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+                }}
               />
             </View>
 
@@ -133,11 +175,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  overlayKeyboardActive: {
+    justifyContent: 'flex-start',
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
+  },
+  scrollContent: {
+    paddingBottom: 10,
+  },
+  scrollContentKeyboardActive: {
+    paddingBottom: 240,
+  },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
     width: '100%',
     maxWidth: 420,
+    maxHeight: '90%',
     padding: 20,
     borderColor: '#ffe0ea',
     borderWidth: 1.5,
@@ -146,6 +199,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 12,
     elevation: 10,
+  },
+  cardKeyboardActive: {
+    maxHeight: '82%',
   },
   header: {
     flexDirection: 'row',

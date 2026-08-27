@@ -7,8 +7,9 @@ import { PaymentScreen } from './PaymentScreen';
 import { TablesScreen } from './TablesScreen';
 import { KitchenScreen } from './KitchenScreen';
 import { useCartStore } from '../store/useCartStore';
-import { Table, UtensilsCrossed, CreditCard, Sparkles, Radio, ChefHat } from 'lucide-react-native';
+import { Table, UtensilsCrossed, CreditCard, Sparkles, Radio, ChefHat, Database } from 'lucide-react-native';
 import { CustomAlertModal } from '../components/CustomAlertModal';
+import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 
 type ScreenId = 'tables' | 'ordering' | 'kitchen' | 'payment';
@@ -21,6 +22,7 @@ const labels: Record<ScreenId, string> = {
 };
 
 export function StitchGalleryScreen() {
+  const [configModalVisible, setConfigModalVisible] = React.useState(false);
   const selectedScreen = useCartStore(state => state.activeTab);
   const setSelectedScreen = useCartStore(state => state.setActiveTab);
   const appMode = useCartStore(state => state.appMode);
@@ -40,32 +42,49 @@ export function StitchGalleryScreen() {
           <View style={styles.headerTitleContainer}>
             <View style={styles.titleRow}>
               <Text style={styles.eyebrow} numberOfLines={1}>POS TERMINAL</Text>
-              {isRealtimeConnected ? (
-                <View style={styles.liveBadge}>
-                  <Radio size={9} color="#059669" />
-                  <Text style={styles.liveBadgeText}>EN VIVO</Text>
-                </View>
-              ) : (
-                <View style={styles.offlineBadge}>
-                  <Text style={styles.offlineBadgeText}>LOCAL</Text>
-                </View>
-              )}
+              <TouchableOpacity
+                onPress={() => setConfigModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                {isRealtimeConnected ? (
+                  <View style={styles.liveBadge}>
+                    <Radio size={9} color="#059669" />
+                    <Text style={styles.liveBadgeText}>EN VIVO</Text>
+                  </View>
+                ) : (
+                  <View style={styles.offlineBadge}>
+                    <Database size={9} color="#ba1a1a" style={{ marginRight: 3 }} />
+                    <Text style={styles.offlineBadgeText}>LOCAL (CONFIGURAR)</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
             <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
               {SUPABASE_CONFIG.restaurantName || 'Ticket App POS'}
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={styles.headerModeBadge}
-            onPress={() => setAppMode(appMode === 'general' ? 'detailed' : 'general')}
-            activeOpacity={0.7}
-          >
-            <Sparkles size={11} color="#b3006c" />
-            <Text style={styles.headerModeBadgeText} numberOfLines={1}>
-              {appMode === 'general' ? 'General' : 'Detallado'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerActionsRow}>
+            <TouchableOpacity
+              style={styles.configHeaderBtn}
+              onPress={() => setConfigModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Database size={13} color="#b3006c" />
+              <Text style={styles.configHeaderBtnText}>Servidor</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.headerModeBadge}
+              onPress={() => setAppMode(appMode === 'general' ? 'detailed' : 'general')}
+              activeOpacity={0.7}
+            >
+              <Sparkles size={11} color="#b3006c" />
+              <Text style={styles.headerModeBadgeText} numberOfLines={1}>
+                {appMode === 'general' ? 'General' : 'Detallado'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -76,6 +95,12 @@ export function StitchGalleryScreen() {
         {selectedScreen === 'kitchen' && <KitchenScreen />}
         {selectedScreen === 'payment' && <PaymentScreen />}
       </View>
+
+      {/* Modal de Configuración de Supabase Global */}
+      <SupabaseConfigModal
+        visible={configModalVisible}
+        onClose={() => setConfigModalVisible(false)}
+      />
 
       {/* Modal de Alertas Estilizado Global */}
       <CustomAlertModal />
@@ -173,9 +198,30 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   offlineBadgeText: {
-    color: '#6b7280',
+    color: '#ba1a1a',
     fontSize: 8,
     fontWeight: '800',
+  },
+  headerActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  configHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fff0f3',
+    borderColor: '#ffe0ea',
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  configHeaderBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#b3006c',
   },
   headerModeBadge: {
     flexDirection: 'row',

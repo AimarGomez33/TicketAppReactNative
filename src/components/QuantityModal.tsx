@@ -40,11 +40,9 @@ export const QuantityModal: React.FC<Props> = ({
   const [customPriceStr, setCustomPriceStr] = useState<string>('');
   const [customName, setCustomName] = useState<string>('');
   const [customVariants, setCustomVariants] = useState<{ id: string; name: string }[]>([]);
-  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
+  const [selectedVariantsList, setSelectedVariantsList] = useState<string[]>([]);
   const [newVariantInput, setNewVariantInput] = useState<string>('');
   const [isKeyboardVisible, setIsKeyboardVisible] = useState<boolean>(false);
-  const [withComboPapas, setWithComboPapas] = useState<boolean>(false);
-  const [withExtraQueso, setWithExtraQueso] = useState<boolean>(false);
 
   useEffect(() => {
     const showSub = Keyboard.addListener(
@@ -72,43 +70,33 @@ export const QuantityModal: React.FC<Props> = ({
       setNotes(currentNotes || '');
       setCustomPriceStr(product.price > 0 ? product.price.toString() : '');
       setCustomName(product.name || 'Extra Personalizado');
-      setWithComboPapas(false);
-      setWithExtraQueso(false);
       const baseVariants = product.variants ? [...product.variants] : [];
       setCustomVariants(baseVariants);
       setNewVariantInput('');
       if (baseVariants.length > 0) {
-        setSelectedVariant(baseVariants[0].name);
+        setSelectedVariantsList([baseVariants[0].name]);
       } else {
-        setSelectedVariant(null);
+        setSelectedVariantsList([]);
       }
     }
   }, [visible, currentQuantity, currentNotes, product]);
 
   if (!product) return null;
 
-  const isBurgerOrWings = product.category === 'hamburguesas' || product.category === 'alitas';
-  const isTaco = product.category === 'tacos';
-
-  const comboExtra = withComboPapas ? 30 : 0;
-  const quesoExtra = withExtraQueso ? 12 : 0;
+  const maxAllowedVariants = 1;
 
   const isCustomPriceMode = Boolean(product.isCustomPrice);
   const parsedCustomPrice = parseFloat(customPriceStr);
   const basePrice = isCustomPriceMode
     ? isNaN(parsedCustomPrice) ? 0 : parsedCustomPrice
     : product.price;
-  const effectivePrice = basePrice + comboExtra + quesoExtra;
+  const effectivePrice = basePrice;
 
-  const getComboSuffix = () => {
-    if (withComboPapas) return ' + Papas';
-    if (withExtraQueso) return ' + Queso';
-    return '';
-  };
+  const variantsSummary = selectedVariantsList.join(' / ');
 
-  const displayName = selectedVariant
-    ? `${product.name} (${selectedVariant})${getComboSuffix()}`
-    : (isCustomPriceMode ? (customName || 'Extra Personalizado') : `${product.name}${getComboSuffix()}`);
+  const displayName = variantsSummary
+    ? `${product.name} (${variantsSummary})`
+    : (isCustomPriceMode ? (customName || 'Extra Personalizado') : product.name);
 
   const handleQuickAdd = (amount: number) => {
     setQuantity(prev => prev + amount);
@@ -118,28 +106,46 @@ export const QuantityModal: React.FC<Props> = ({
     setQuantity(amount);
   };
 
+  const toggleVariant = (name: string) => {
+    if (maxAllowedVariants === 1) {
+      setSelectedVariantsList([name]);
+      return;
+    }
+
+    if (selectedVariantsList.includes(name)) {
+      if (selectedVariantsList.length > 1) {
+        setSelectedVariantsList(selectedVariantsList.filter(v => v !== name));
+      }
+    } else {
+      if (selectedVariantsList.length >= maxAllowedVariants) {
+        setSelectedVariantsList([selectedVariantsList[selectedVariantsList.length - 1], name]);
+      } else {
+        setSelectedVariantsList([...selectedVariantsList, name]);
+      }
+    }
+  };
+
   const handleAddCustomVariant = () => {
     const clean = newVariantInput.trim();
     if (clean.length === 0) return;
     const newVar = { id: `custom-var-${Date.now()}`, name: clean };
     setCustomVariants(prev => [...prev, newVar]);
-    setSelectedVariant(clean);
+    toggleVariant(clean);
     setNewVariantInput('');
   };
 
   const handleConfirm = () => {
-    const comboNote = withComboPapas ? 'Con Papas (150gr)' : (withExtraQueso ? 'Con Queso Fundido' : '');
-    const finalNotes = [notes.trim(), comboNote].filter(Boolean).join(' | ');
+    const finalNotes = notes.trim();
 
-    const finalVariantName = selectedVariant
-      ? `${product.name} ${selectedVariant}${getComboSuffix()}`
+    const finalVariantName = variantsSummary
+      ? `${product.name} (${variantsSummary})`
       : undefined;
 
     onConfirm(
       Math.max(1, quantity),
       finalNotes,
-      (isCustomPriceMode || withComboPapas || withExtraQueso) ? effectivePrice : undefined,
-      finalVariantName || (isCustomPriceMode ? customName.trim() : (withComboPapas || withExtraQueso ? displayName : undefined))
+      isCustomPriceMode ? effectivePrice : undefined,
+      finalVariantName || (isCustomPriceMode ? customName.trim() : undefined)
     );
     onClose();
   };
@@ -177,13 +183,14 @@ export const QuantityModal: React.FC<Props> = ({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={[styles.scrollContent, isKeyboardVisible && styles.scrollContentKeyboardActive]}
           >
-            {/* Selector de Guisado / Variante / Sabor */}
-            {(customVariants.length > 0 || product.category === 'bebidas' || product.category === 'quesadillas') && (
+            {customVariants.length > 0 && (
               <View style={styles.variantsSection}>
-                <Text style={styles.sectionLabel}>ELIGE EL SABOR, GUISADO O VARIANTE</Text>
+                <Text style={styles.sectionLabel}>
+                  ELIGE UNA VARIANTE
+                </Text>
                 <View style={styles.variantsGrid}>
                   {customVariants.map((v) => {
-                    const isSelected = selectedVariant === v.name;
+                    const isSelected = selectedVariantsList.includes(v.name);
                     return (
                       <TouchableOpacity
                         key={v.id}
@@ -191,7 +198,7 @@ export const QuantityModal: React.FC<Props> = ({
                           styles.variantChip,
                           isSelected && styles.variantChipActive,
                         ]}
-                        onPress={() => setSelectedVariant(v.name)}
+                        onPress={() => toggleVariant(v.name)}
                         activeOpacity={0.7}
                       >
                         {isSelected && <Check size={13} color="#ffffff" style={styles.variantCheckIcon} />}
@@ -212,7 +219,7 @@ export const QuantityModal: React.FC<Props> = ({
                 <View style={styles.addVariantRow}>
                   <TextInput
                     style={styles.addVariantInput}
-                    placeholder="Otro sabor/opción (ej. Sprite Zero, Maracuyá)..."
+                    placeholder="Otra opción..."
                     placeholderTextColor="#8e6e79"
                     value={newVariantInput}
                     onChangeText={setNewVariantInput}
@@ -230,63 +237,6 @@ export const QuantityModal: React.FC<Props> = ({
               </View>
             )}
 
-            {/* Combo con Papas para Hamburguesas y Alitas */}
-            {isBurgerOrWings && (
-              <View style={styles.comboSection}>
-                <Text style={styles.sectionLabel}>COMBO CON PAPAS (150 GR)</Text>
-                <TouchableOpacity
-                  style={[styles.comboCard, withComboPapas && styles.comboCardActive]}
-                  onPress={() => setWithComboPapas(!withComboPapas)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.comboCardLeft}>
-                    <View style={[styles.comboCheckbox, withComboPapas && styles.comboCheckboxActive]}>
-                      {withComboPapas && <Check size={14} color="#FFF" />}
-                    </View>
-                    <View style={styles.comboTextCol}>
-                      <Text style={[styles.comboCardTitle, withComboPapas && styles.comboCardTitleActive]}>
-                        Combo con Papas
-                      </Text>
-                      <Text style={styles.comboCardSubtitle}>
-                        Papas a la francesa sazonadas (+ $30.00 c/u)
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.comboCardBadge, withComboPapas && styles.comboCardBadgeActive]}>
-                    +$30.00
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* Extra Queso para Tacos */}
-            {isTaco && (
-              <View style={styles.comboSection}>
-                <Text style={styles.sectionLabel}>ADICIONAL</Text>
-                <TouchableOpacity
-                  style={[styles.comboCard, withExtraQueso && styles.comboCardActive]}
-                  onPress={() => setWithExtraQueso(!withExtraQueso)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.comboCardLeft}>
-                    <View style={[styles.comboCheckbox, withExtraQueso && styles.comboCheckboxActive]}>
-                      {withExtraQueso && <Check size={14} color="#FFF" />}
-                    </View>
-                    <View style={styles.comboTextCol}>
-                      <Text style={[styles.comboCardTitle, withExtraQueso && styles.comboCardTitleActive]}>
-                        Con Queso Fundido
-                      </Text>
-                      <Text style={styles.comboCardSubtitle}>
-                        Queso extra por taco (+ $12.00 c/u)
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.comboCardBadge, withExtraQueso && styles.comboCardBadgeActive]}>
-                    +$12.00
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
             {/* Input Especial de Precio Personalizado */}
             {isCustomPriceMode && (
               <View style={styles.customPriceSection}>
@@ -394,7 +344,7 @@ export const QuantityModal: React.FC<Props> = ({
               <Text style={styles.sectionLabel}>NOTAS / DETALLES DE COCINA</Text>
               <TextInput
                 style={styles.notesInput}
-                placeholder="Ej: salsa verde aparte, bien doradas, con poco queso..."
+                placeholder="Instrucciones para preparación..."
                 placeholderTextColor="#8e6e79"
                 value={notes}
                 onChangeText={setNotes}

@@ -48,14 +48,14 @@ export const KitchenScreen: React.FC = () => {
 
       // Filtrar según la estación de cocina seleccionada
       if (selectedStation === 'all') return true;
-      return items.some(it => (it.product.kitchenStation || 'mexican') === selectedStation);
+      return items.some(it => (it.product.kitchenStation || 'station_a') === selectedStation);
     })
     .map(tbl => {
       const order = tables[tbl];
       const allItems = Object.values(order.cart || {});
       const stationItems = selectedStation === 'all'
         ? allItems
-        : allItems.filter(it => (it.product.kitchenStation || 'mexican') === selectedStation);
+        : allItems.filter(it => (it.product.kitchenStation || 'station_a') === selectedStation);
 
       return {
         tableNumber: tbl,
@@ -158,40 +158,40 @@ export const KitchenScreen: React.FC = () => {
         <TouchableOpacity
           style={[
             styles.stationButton,
-            selectedStation === 'mexican' && styles.stationButtonActive,
+            selectedStation === 'station_a' && styles.stationButtonActive,
           ]}
-          onPress={() => setSelectedStation('mexican')}
+          onPress={() => setSelectedStation('station_a')}
           activeOpacity={0.75}
         >
-          <UtensilsCrossed size={14} color={selectedStation === 'mexican' ? '#ffffff' : '#5a3f49'} />
+          <UtensilsCrossed size={14} color={selectedStation === 'station_a' ? '#ffffff' : '#5a3f49'} />
           <Text
             style={[
               styles.stationButtonText,
-              selectedStation === 'mexican' && styles.stationButtonTextActive,
+              selectedStation === 'station_a' && styles.stationButtonTextActive,
             ]}
             numberOfLines={1}
           >
-            Cocina 1: Antojitos
+            Cocina 1
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[
             styles.stationButton,
-            selectedStation === 'american_tacos' && styles.stationButtonActive,
+            selectedStation === 'station_b' && styles.stationButtonActive,
           ]}
-          onPress={() => setSelectedStation('american_tacos')}
+          onPress={() => setSelectedStation('station_b')}
           activeOpacity={0.75}
         >
-          <Flame size={14} color={selectedStation === 'american_tacos' ? '#ffffff' : '#5a3f49'} />
+          <Flame size={14} color={selectedStation === 'station_b' ? '#ffffff' : '#5a3f49'} />
           <Text
             style={[
               styles.stationButtonText,
-              selectedStation === 'american_tacos' && styles.stationButtonTextActive,
+              selectedStation === 'station_b' && styles.stationButtonTextActive,
             ]}
             numberOfLines={1}
           >
-            Cocina 2: Tacos & Amer.
+            Cocina 2
           </Text>
         </TouchableOpacity>
       </View>
@@ -226,10 +226,10 @@ export const KitchenScreen: React.FC = () => {
             <Text style={styles.emptyTitle}>¡Todo al día en Cocina!</Text>
             <Text style={styles.emptySubtitle}>
               No hay platillos pendientes por preparar en{' '}
-              {selectedStation === 'mexican'
-                ? 'Cocina 1 (Antojitos Mexicanos)'
-                : selectedStation === 'american_tacos'
-                ? 'Cocina 2 (Tacos y Americana)'
+              {selectedStation === 'station_a'
+                ? 'Cocina 1'
+                : selectedStation === 'station_b'
+                ? 'Cocina 2'
                 : 'ninguna cocina'}
               .
             </Text>

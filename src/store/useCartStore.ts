@@ -8,23 +8,26 @@ import {
   requestBillInSupabase,
   finalizePaymentInSupabase,
   clearTableInSupabase,
+  updateTableStatusInSupabase,
+  updateOrderItemStatusInSupabase,
   subscribeToRealtimeChanges,
   broadcastTableState,
   broadcastKitchenItemStatus,
   fetchMenuCategoriesFromSupabase,
   fetchMenuProductsFromSupabase,
   RemoteTableUpdate,
+  ensureSupabaseSession,
 } from '../services/supabaseService';
 import { isSupabaseConfigured } from '../config/supabaseConfig';
 import { printTicketTCP } from '../services/printerService';
-import { MOCK_PRODUCTS_GENERAL, CATEGORIES_GENERAL } from '../data/mockupMenu';
+import { runInBackground } from '../services/asyncWorkerPool';
 
-export type KitchenStation = 'mexican' | 'american_tacos';
+export type KitchenStation = 'station_a' | 'station_b';
 
 export interface Category {
   id: string;
   name: string;
-  station?: 'mexican' | 'american_tacos' | 'all';
+  station?: KitchenStation | 'all';
   iconName?: string;
   sortOrder?: number;
 }
@@ -45,7 +48,7 @@ export type ItemKitchenStatus = 'pending' | 'sent_to_kitchen' | 'preparing' | 'r
 export interface CartItem {
   product: Product;
   quantity: number;
-  notes?: string; // Modificadores: "sin cebolla", "doble queso"
+  notes?: string;
   round?: number; // Número de ronda (1, 2, 3...)
   status?: ItemKitchenStatus; // 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready'
   dbId?: string;
@@ -175,6 +178,7 @@ const initialTables = (): Record<string, TableOrder> => {
 
 // Helper con debounce para evitar llamadas masivas simultáneas a Supabase
 let syncTimeoutId: any = null;
+let menuLoadSequence = 0;
 const debouncedSync = (
   tableNumber: string,
   items: CartItem[],
@@ -203,7 +207,7 @@ const debouncedSync = (
     clearTimeout(syncTimeoutId);
   }
   syncTimeoutId = setTimeout(() => {
-    syncActiveOrderToSupabase(tableNumber, items, total, waiterName);
+    runInBackground(() => syncActiveOrderToSupabase(tableNumber, items, total, waiterName), 'debouncedSync:Supabase');
   }, 350);
 };
 
@@ -220,26 +224,61 @@ export const useCartStore = create<CartState>((set, get) => ({
   customAlert: null,
   isRealtimeConnected: false,
 
-  // Catálogo de Menú y Categorías
-  menuProducts: MOCK_PRODUCTS_GENERAL,
-  menuCategories: CATEGORIES_GENERAL,
+  // El catálogo comercial sólo vive en Supabase. Nunca se usa el menú incluido
+  // en el código como respaldo, pues produciría precios distintos por terminal.
+  menuProducts: [],
+  menuCategories: [],
 
   loadMenuFromRemote: async () => {
     if (!isSupabaseConfigured()) return;
+    const requestSequence = ++menuLoadSequence;
     try {
       const [remoteCats, remoteProds] = await Promise.all([
         fetchMenuCategoriesFromSupabase(),
         fetchMenuProductsFromSupabase(),
       ]);
 
-      if (remoteCats && remoteCats.length > 0) {
-        set({ menuCategories: remoteCats });
+      if (!remoteCats || !remoteProds) {
+        throw new Error('No fue posible leer el catálogo remoto');
       }
-      if (remoteProds && remoteProds.length > 0) {
-        set({ menuProducts: remoteProds });
-      }
+      // Ignora una respuesta vieja si un cambio posterior del catálogo ya
+      // disparó una carga más reciente.
+      if (requestSequence !== menuLoadSequence) return;
+
+      // Además de refrescar las tarjetas de menú, se actualizan los productos
+      // ya agregados a mesas/mostrador. Así un cambio de precio hecho en
+      // Supabase se refleja inmediatamente en totales y tickets abiertos.
+      const productById = new Map(remoteProds.map(product => [product.id, product]));
+      const refreshCart = (cart: Record<string, CartItem>) =>
+        Object.fromEntries(
+          Object.entries(cart).map(([id, item]) => [
+            id,
+            productById.has(item.product.id)
+              ? { ...item, product: { ...item.product, ...productById.get(item.product.id)! } }
+              : item,
+          ]),
+        );
+
+      set(state => {
+        const tables = Object.fromEntries(
+          Object.entries(state.tables).map(([tableNumber, table]) => [
+            tableNumber,
+            { ...table, cart: refreshCart(table.cart) },
+          ]),
+        );
+        const cart = refreshCart(state.cart);
+        const quickSaleCart = refreshCart(state.quickSaleCart);
+
+        return {
+          menuCategories: remoteCats,
+          menuProducts: remoteProds,
+          tables,
+          cart,
+          quickSaleCart,
+        };
+      });
     } catch (err) {
-      console.warn('Could not load remote menu, using cached/fallback:', err);
+      console.warn('Could not load remote menu:', err);
     }
   },
 
@@ -249,7 +288,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       name: name.trim() || 'Extra Personalizado',
       price: Math.max(0, price),
       category: 'extras',
-      kitchenStation: 'mexican',
+      kitchenStation: 'station_a',
       isCustomPrice: true,
     };
 
@@ -281,8 +320,13 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   // Inicializar suscripción y carga en tiempo real desde Supabase
-  initRealtimeSync: () => {
+  initRealtimeSync: async () => {
     if (!isSupabaseConfigured()) {
+      return;
+    }
+
+    if (!(await ensureSupabaseSession())) {
+      get().setRealtimeConnected(false);
       return;
     }
 
@@ -290,8 +334,24 @@ export const useCartStore = create<CartState>((set, get) => ({
     get().loadMenuFromRemote();
 
     // 1. Cargar estado inicial de mesas
-    fetchRemoteTables().then((remoteTables) => {
+    fetchRemoteTables().then(async (remoteTables) => {
       if (remoteTables) {
+        // El estado de mesa sólo indica que existe consumo. La comanda se
+        // carga explícitamente para cada mesa activa, aun si esta terminal
+        // nunca la abrió; así no aparecen mesas ocupadas con 0 artículos.
+        const remoteCarts = await Promise.all(
+          Object.entries(remoteTables).map(async ([tableNumber, table]) => {
+            if (table.status !== 'busy' && table.status !== 'bill_requested') {
+              return [tableNumber, {} as Record<string, CartItem>] as const;
+            }
+            const order = await fetchActiveOrderItems(tableNumber);
+            return [
+              tableNumber,
+              Object.fromEntries((order?.items || []).map(item => [item.product.id, item])),
+            ] as const;
+          }),
+        );
+        const cartsByTable = Object.fromEntries(remoteCarts);
         set((state) => {
           const updated = { ...state.tables };
           Object.keys(remoteTables).forEach((tblNum) => {
@@ -299,18 +359,19 @@ export const useCartStore = create<CartState>((set, get) => ({
               updated[tblNum] = {
                 ...updated[tblNum],
                 status: remoteTables[tblNum].status,
+                cart: cartsByTable[tblNum] || {},
                 lastUpdated: remoteTables[tblNum].lastUpdated || updated[tblNum].lastUpdated,
               };
             } else {
               updated[tblNum] = {
                 status: remoteTables[tblNum].status,
-                cart: {},
+                cart: cartsByTable[tblNum] || {},
                 currentRound: 1,
                 lastUpdated: remoteTables[tblNum].lastUpdated,
               };
             }
           });
-          return { tables: updated, isRealtimeConnected: true };
+          return { tables: updated };
         });
       }
     });
@@ -326,6 +387,11 @@ export const useCartStore = create<CartState>((set, get) => ({
           updatedTables[tbl] = {
             ...currentTableOrder,
             status: tableUpdate.status,
+            // Una mesa liberada/cobrada no puede conservar la comanda de otra
+            // terminal en memoria; la BD ya confirmó que no hay orden activa.
+            cart: (tableUpdate.status === 'free' || tableUpdate.status === 'cleaning')
+              ? {}
+              : currentTableOrder.cart,
             lastUpdated: tableUpdate.lastUpdated || new Date().toLocaleTimeString(),
             waiterName: tableUpdate.waiterName || currentTableOrder.waiterName,
           };
@@ -333,9 +399,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           // Si una mesa se libera o limpia remotamente y es la mesa activa, limpiar comanda
           let updatedCart = state.cart;
           if (state.tableNumber === tbl && (tableUpdate.status === 'free' || tableUpdate.status === 'cleaning')) {
-            if (tableUpdate.status === 'free') {
-              updatedCart = {};
-            }
+            updatedCart = {};
           }
 
           return {
@@ -425,7 +489,13 @@ export const useCartStore = create<CartState>((set, get) => ({
           }
           return { tables: updatedTables, cart: updatedCart };
         });
-      }
+      },
+      (tableNumber) => {
+        // Las modificaciones de order_items también deben viajar por la BD;
+        // el broadcast sólo acelera la interfaz, no es fuente de verdad.
+        get().loadTableCartFromRemote(tableNumber);
+      },
+      (connected) => get().setRealtimeConnected(connected),
     );
   },
 
@@ -449,9 +519,15 @@ export const useCartStore = create<CartState>((set, get) => ({
         const localTableCart = state.tableNumber === tableNumber ? state.cart : (updatedTables[tableNumber]?.cart || {});
         
         // Si el usuario ya está agregando ítems localmente y el servidor devolvió vacío, preservar los locales
-        const finalCart = Object.keys(localTableCart).length > 0 && Object.keys(cartRecord).length === 0
-          ? localTableCart
-          : (Object.keys(cartRecord).length > 0 ? cartRecord : localTableCart);
+        const remoteStateConfirmsEmpty = ['free', 'cleaning'].includes(updatedTables[tableNumber]?.status || '');
+        // Se conserva una edición local sólo mientras la mesa siga ocupada y
+        // Supabase todavía no haya recibido el debounce. Si la mesa ya fue
+        // liberada/cobrada remotamente, el servidor siempre gana.
+        const finalCart = remoteStateConfirmsEmpty
+          ? {}
+          : Object.keys(localTableCart).length > 0 && Object.keys(cartRecord).length === 0
+            ? localTableCart
+            : (Object.keys(cartRecord).length > 0 ? cartRecord : localTableCart);
 
         if (updatedTables[tableNumber]) {
           updatedTables[tableNumber] = {
@@ -507,7 +583,19 @@ export const useCartStore = create<CartState>((set, get) => ({
     }
   },
 
-  setTableStatus: (table, status) =>
+  setTableStatus: (table, status) => {
+    const tableOrder = get().tables[table];
+    broadcastTableState({
+      tableNumber: table,
+      status,
+      cart: tableOrder?.cart || {},
+      currentRound: tableOrder?.currentRound || 1,
+      waiterName: tableOrder?.waiterName,
+      isBillRequested: status === 'bill_requested',
+    });
+    if (isSupabaseConfigured()) {
+      runInBackground(() => updateTableStatusInSupabase(table, status), 'setTableStatus:Supabase');
+    }
     set((state) => {
       const updatedTables = { ...state.tables };
       if (updatedTables[table]) {
@@ -517,7 +605,8 @@ export const useCartStore = create<CartState>((set, get) => ({
         };
       }
       return { tables: updatedTables };
-    }),
+    });
+  },
 
   // Agregar 1 unidad
   addItem: (product, notes) => get().addQuantity(product, 1, notes),
@@ -671,6 +760,12 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   updateItemKitchenStatus: (tableNumber, productId, status) => {
     broadcastKitchenItemStatus(tableNumber, productId, status);
+    if (isSupabaseConfigured()) {
+      runInBackground(
+        () => updateOrderItemStatusInSupabase(tableNumber, productId, status),
+        'updateItemKitchenStatus:Supabase',
+      );
+    }
     set((state) => {
       const updatedTables = { ...state.tables };
       const tableOrder = updatedTables[tableNumber];
@@ -796,7 +891,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     });
 
     if (isSupabaseConfigured()) {
-      await markRoundSentInSupabase(tableToUse, currentRound);
+      runInBackground(() => markRoundSentInSupabase(tableToUse, currentRound), 'sendRoundToKitchen:Supabase');
     }
 
     return true;
@@ -830,7 +925,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     });
 
     if (isSupabaseConfigured()) {
-      await requestBillInSupabase(tableToUse);
+      runInBackground(() => requestBillInSupabase(tableToUse), 'requestBillForTable:Supabase');
     }
 
     return true;
@@ -866,7 +961,10 @@ export const useCartStore = create<CartState>((set, get) => ({
     };
 
     if (isSupabaseConfigured()) {
-      await finalizePaymentInSupabase(activeTable, paymentMethod, amountPaid, change, total);
+      runInBackground(
+        () => finalizePaymentInSupabase(activeTable, paymentMethod, amountPaid, change, total),
+        'completePayment:Supabase'
+      );
     }
 
     set((prev) => {

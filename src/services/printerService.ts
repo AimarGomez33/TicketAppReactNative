@@ -7,7 +7,7 @@ import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 const PRINTER_CONFIG = {
   host: SUPABASE_CONFIG.printerHost,
   port: SUPABASE_CONFIG.printerPort,
-  timeout: 3000, // 3 segundos max para no congelar la UI
+  timeout: 4000,
 };
 
 const ESC_POS = {
@@ -26,7 +26,7 @@ const ESC_POS = {
 export interface PrintOptions {
   showPrices?: boolean;
   isKitchenComanda?: boolean;
-  station?: 'mexican' | 'american_tacos' | 'all';
+  station?: 'station_a' | 'station_b' | 'all';
   currentRound?: number;
   paymentMethod?: 'cash' | 'card' | 'transfer';
   amountPaid?: number;
@@ -68,11 +68,10 @@ export const generateEscPosBuffer = (
   const currentRound = options?.currentRound || 1;
   const station = options?.station || 'all';
 
-  // Filtrar ítems por estación si se especifica comanda de cocina
   let targetItems = items;
   if (isKitchen && station !== 'all') {
     targetItems = items.filter((it) => {
-      const itemStation = it.product.kitchenStation || 'mexican';
+      const itemStation = it.product.kitchenStation || 'station_a';
       return itemStation === station;
     });
   }
@@ -97,10 +96,10 @@ export const generateEscPosBuffer = (
 
   if (isKitchen) {
     const stationLabel =
-      station === 'mexican'
-        ? 'COCINA 1: MEXICANA / ANTOJITOS'
-        : station === 'american_tacos'
-        ? 'COCINA 2: TACOS Y AMERICANA'
+      station === 'station_a'
+        ? 'ESTACION DE COCINA 1'
+        : station === 'station_b'
+        ? 'ESTACION DE COCINA 2'
         : 'COMANDA GENERAL';
 
     addBytes(ESC_POS.TXT_BOLD_ON);
@@ -109,10 +108,9 @@ export const generateEscPosBuffer = (
     addText(`MESA: ${tableNumber ? tableNumber.toUpperCase() : 'S/N'}\n`);
     addBytes(ESC_POS.TXT_NORMAL);
     addBytes(ESC_POS.TXT_BOLD_OFF);
-    addText(`Ronda Actual: #${currentRound} | Hora: ${new Date().toLocaleTimeString()}\n`);
+    addText(`Ronda: #${currentRound} | Hora: ${new Date().toLocaleTimeString()}\n`);
     addText('================================\n');
 
-    // Separar platillos nuevos (pending o de la ronda actual) vs anteriores (ya enviados)
     const newItems = targetItems.filter(
       (it) => it.status === 'pending' || (it.round && it.round === currentRound)
     );
@@ -120,26 +118,28 @@ export const generateEscPosBuffer = (
       (it) => it.status === 'sent_to_kitchen' && it.round && it.round < currentRound
     );
 
-    if (newItems.length > 0) {
+    const itemsToPrint = newItems.length > 0 ? newItems : targetItems;
+
+    addBytes(ESC_POS.ALIGN_LEFT);
+    addBytes(ESC_POS.TXT_BOLD_ON);
+    addText(`--- A PREPARAR (Ronda #${currentRound}) ---\n`);
+    addBytes(ESC_POS.TXT_BOLD_OFF);
+
+    itemsToPrint.forEach((it) => {
       addBytes(ESC_POS.TXT_BOLD_ON);
-      addText(`--- PLATILLOS A PREPARAR (Ronda #${currentRound}) ---\n`);
+      addBytes(ESC_POS.TXT_DOUBLE_HEIGHT);
+      addText(` > ${it.quantity}x ${it.product.name}\n`);
+      addBytes(ESC_POS.TXT_NORMAL);
       addBytes(ESC_POS.TXT_BOLD_OFF);
-      addBytes(ESC_POS.ALIGN_LEFT);
-
-      newItems.forEach((it) => {
-        addBytes(ESC_POS.TXT_BOLD_ON);
-        addText(`[ ] ${it.quantity}x ${it.product.name}\n`);
-        addBytes(ESC_POS.TXT_BOLD_OFF);
-        if (it.notes && it.notes.trim().length > 0) {
-          addText(`    * NOTA: ${it.notes.trim()}\n`);
-        }
-      });
+      if (it.notes && it.notes.trim().length > 0) {
+        addText(`    * NOTA: ${it.notes.trim()}\n`);
+      }
       addText('\n');
-    }
+    });
 
-    if (previousItems.length > 0) {
+    if (previousItems.length > 0 && newItems.length > 0) {
       addBytes(ESC_POS.ALIGN_CENTER);
-      addText('--- RONDAS ANTERIORES (YA ENVIADAS) ---\n');
+      addText('--- RONDAS ANTERIORES ---\n');
       addBytes(ESC_POS.ALIGN_LEFT);
       previousItems.forEach((it) => {
         addText(`  (R#${it.round || 1}) ${it.quantity}x ${it.product.name} ${it.notes ? `(${it.notes})` : ''}\n`);
@@ -218,7 +218,7 @@ export const generateEscPosBuffer = (
 };
 
 /**
- * Transmisión Socket TCP a la impresora (Ejecución individual limpia sin duplicados)
+ * Transmisión Socket TCP a la impresora térmica con manejo de ciclo de vida seguro
  */
 const executeSocketTransmission = (
   payload: Uint8Array,
@@ -227,8 +227,7 @@ const executeSocketTransmission = (
 ): Promise<boolean> => {
   return new Promise((resolve, reject) => {
     let client: any = null;
-    let isFinished = false;
-    let dataSent = false;
+    let isSettled = false;
 
     const cleanup = () => {
       if (client) {
@@ -240,85 +239,103 @@ const executeSocketTransmission = (
       }
     };
 
+    const finishSuccess = () => {
+      if (!isSettled) {
+        isSettled = true;
+        cleanup();
+        resolve(true);
+      }
+    };
+
+    const finishError = (err: any) => {
+      if (!isSettled) {
+        isSettled = true;
+        cleanup();
+        reject(err);
+      }
+    };
+
     try {
       client = TcpSocket.createConnection({ host, port }, () => {
         try {
           const buffer = Buffer.from(payload);
           client.write(buffer, (err?: any) => {
             if (err) {
-              if (!isFinished) {
-                isFinished = true;
-                cleanup();
-                reject(err);
-              }
+              finishError(err);
               return;
             }
-
-            dataSent = true;
-            // 200ms para corte de papel y finalización
-            setTimeout(() => {
-              if (!isFinished) {
-                isFinished = true;
-                cleanup();
-                resolve(true);
-              }
-            }, 200);
+            setTimeout(finishSuccess, 180);
           });
-        } catch (err) {
-          if (!isFinished) {
-            isFinished = true;
-            cleanup();
-            reject(err);
-          }
+        } catch (writeErr) {
+          finishError(writeErr);
         }
       });
 
       client.setTimeout(PRINTER_CONFIG.timeout);
 
       client.on('timeout', () => {
-        if (!isFinished) {
-          isFinished = true;
-          cleanup();
-          if (dataSent) {
-            resolve(true);
-          } else {
-            reject(new Error(`Timeout: Impresora en ${host}:${port} no respondió.`));
-          }
-        }
+        finishError(new Error(`Timeout: Impresora en ${host}:${port} no respondió.`));
       });
 
-      client.on('error', (error: any) => {
-        if (!isFinished) {
-          isFinished = true;
-          cleanup();
-          if (dataSent) {
-            resolve(true);
-          } else {
-            reject(error);
-          }
-        }
+      client.on('error', (err: any) => {
+        finishError(err);
       });
 
       client.on('close', () => {
-        if (!isFinished) {
-          isFinished = true;
-          cleanup();
-          resolve(true);
-        }
+        finishSuccess();
       });
     } catch (createErr) {
-      cleanup();
-      reject(createErr);
+      finishError(createErr);
     }
   });
 };
 
 /**
- * Deduplicador estricto para evitar imprimir 2 o 3 veces el mismo ticket
+ * Cola de impresión autorrecuperable (FIFO):
+ * Garantiza que si una impresión falla o tiene jitter de red,
+ * NUNCA bloquee ni aborte las impresiones futuras de la aplicación.
  */
-let lastPrintFingerprint = '';
-let lastPrintTimestamp = 0;
-let isPrintLocked = false;
+class RobustPrinterQueue {
+  private queue: (() => Promise<boolean>)[] = [];
+  private isProcessing = false;
+
+  public enqueue(job: () => Promise<boolean>): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.queue.push(async () => {
+        try {
+          const ok = await job();
+          resolve(ok);
+          return ok;
+        } catch (err) {
+          console.warn('[PrinterQueue] Fallo en envio a impresora:', err);
+          resolve(false);
+          return false;
+        }
+      });
+      this.processNext();
+    });
+  }
+
+  private async processNext() {
+    if (this.isProcessing || this.queue.length === 0) return;
+    this.isProcessing = true;
+    const task = this.queue.shift();
+    if (task) {
+      try {
+        await task();
+      } catch {}
+    }
+    this.isProcessing = false;
+    if (this.queue.length > 0) {
+      setTimeout(() => this.processNext(), 100);
+    }
+  }
+}
+
+const printerQueue = new RobustPrinterQueue();
+
+let lastPrintSignature = '';
+let lastPrintTime = 0;
 
 export const printTicketTCP = async (
   tableNumber: string,
@@ -328,34 +345,22 @@ export const printTicketTCP = async (
   customHost?: string,
   customPort?: number,
 ): Promise<boolean> => {
-  const currentFingerprint = `${tableNumber}_${total}_${items.length}_${options?.isKitchenComanda ? 'kitchen' : 'bill'}_${options?.currentRound || 1}`;
+  if (!items || items.length === 0) return true;
+
+  const signature = `${tableNumber}_${total}_${items.length}_${options?.isKitchenComanda ? 'k' : 'b'}_${options?.currentRound || 1}`;
   const now = Date.now();
 
-  // Si se envió EXACTAMENTE el mismo ticket hace menos de 2.5 segundos, descartar duplicado
-  if (currentFingerprint === lastPrintFingerprint && now - lastPrintTimestamp < 2500) {
-    console.log('🛡️ Descartando impresión duplicada prevenida por deduplicador.');
+  // Antirrebote ultra-rápido de 350ms para evitar dobles clics accidentales en pantalla táctil
+  if (signature === lastPrintSignature && now - lastPrintTime < 350) {
     return true;
   }
 
-  if (isPrintLocked) {
-    console.log('🛡️ Impresión en progreso, evitando colisión de socket.');
-    return true;
-  }
-
-  isPrintLocked = true;
-  lastPrintFingerprint = currentFingerprint;
-  lastPrintTimestamp = now;
+  lastPrintSignature = signature;
+  lastPrintTime = now;
 
   const payload = generateEscPosBuffer(tableNumber, items, total, options);
   const host = customHost || PRINTER_CONFIG.host;
   const port = customPort || PRINTER_CONFIG.port;
 
-  try {
-    const result = await executeSocketTransmission(payload, host, port);
-    isPrintLocked = false;
-    return result;
-  } catch (err) {
-    isPrintLocked = false;
-    throw err;
-  }
+  return printerQueue.enqueue(() => executeSocketTransmission(payload, host, port));
 };
