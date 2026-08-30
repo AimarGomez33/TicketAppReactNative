@@ -60,4 +60,20 @@ describe('useCartStore', () => {
     expect(items).toHaveLength(1);
     expect(items[0].product.price).toBe(25.5);
   });
+
+  test('crea pedidos para llevar independientes con referencias únicas', () => {
+    const firstReference = useCartStore.getState().createTakeawayOrder();
+    useCartStore.getState().addQuantity(catalog[0], 1);
+
+    const secondReference = useCartStore.getState().createTakeawayOrder();
+    useCartStore.getState().addQuantity(catalog[1], 1);
+
+    const state = useCartStore.getState();
+    expect(firstReference).toMatch(/^L-/);
+    expect(secondReference).toMatch(/^L-/);
+    expect(secondReference).not.toBe(firstReference);
+    expect(state.tables[firstReference].orderType).toBe('takeaway');
+    expect(state.tables[firstReference].cart[catalog[0].id].quantity).toBe(1);
+    expect(state.tables[secondReference].cart[catalog[1].id].quantity).toBe(1);
+  });
 });

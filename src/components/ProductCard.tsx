@@ -21,7 +21,13 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
   const quantity = cartItem ? cartItem.quantity : 0;
   const notes = cartItem?.notes;
 
-  const handleModalConfirm = (newQty: number, newNotes: string, customPrice?: number, customName?: string) => {
+  const handleModalConfirm = (
+    newQty: number,
+    newNotes: string,
+    customPrice?: number,
+    customName?: string,
+    selectedModifierOptionIds?: string[],
+  ) => {
     if (product.isCustomPrice) {
       const finalPrice = customPrice !== undefined ? customPrice : product.price;
       const finalName = customName || product.name;
@@ -31,12 +37,17 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
     }
 
     if (customName && customName !== product.name) {
-      const variantSlug = customName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const configurationKey = selectedModifierOptionIds?.length
+        ? selectedModifierOptionIds.slice().sort().join('--')
+        : customName.toLowerCase().replace(/[^a-z0-9]/g, '-');
       const variantProduct: Product = {
         ...product,
-        id: `${product.id}-${variantSlug}`,
+        id: `${product.id}--${configurationKey}`,
+        menuProductId: product.menuProductId || product.id,
         name: customName,
         price: customPrice !== undefined ? customPrice : product.price,
+        selectedModifierOptionIds,
+        modifierTotal: (customPrice !== undefined ? customPrice : product.price) - product.price,
       };
       setQuantity(variantProduct, newQty, newNotes);
       setModalVisible(false);
@@ -142,7 +153,11 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
                 style={styles.addBtn}
                 onPress={(e) => {
                   e.stopPropagation();
-                  addItem(product);
+                  if (product.modifierGroups?.length || product.variants?.length) {
+                    setModalVisible(true);
+                  } else {
+                    addItem(product);
+                  }
                 }}
                 activeOpacity={0.7}
               >

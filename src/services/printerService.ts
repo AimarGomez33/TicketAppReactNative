@@ -1,7 +1,7 @@
 // src/services/printerService.ts
 import TcpSocket from 'react-native-tcp-socket';
 import { Buffer } from 'buffer';
-import { CartItem } from '../store/useCartStore';
+import { CartItem, PaymentMethod } from '../store/useCartStore';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 
 const PRINTER_CONFIG = {
@@ -28,7 +28,7 @@ export interface PrintOptions {
   isKitchenComanda?: boolean;
   station?: 'station_a' | 'station_b' | 'all';
   currentRound?: number;
-  paymentMethod?: 'cash' | 'card' | 'transfer';
+  paymentMethod?: PaymentMethod;
   amountPaid?: number;
   change?: number;
   isReprint?: boolean;
@@ -196,13 +196,7 @@ export const generateEscPosBuffer = (
 
   if (options?.paymentMethod) {
     addBytes(ESC_POS.ALIGN_LEFT);
-    const methodStr =
-      options.paymentMethod === 'cash'
-        ? 'Efectivo'
-        : options.paymentMethod === 'card'
-        ? 'Tarjeta'
-        : 'Transferencia';
-    addText(`Metodo de Pago: ${methodStr}\n`);
+    addText('Metodo de Pago: Efectivo\n');
     if (options.amountPaid && options.amountPaid > 0) {
       addText(`Recibido: $${options.amountPaid.toFixed(2)}\n`);
       addText(`Cambio:   $${(options.change || 0).toFixed(2)}\n`);

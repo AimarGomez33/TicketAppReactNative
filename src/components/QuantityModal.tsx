@@ -12,7 +12,7 @@ import {
   Platform,
   Keyboard,
 } from 'react-native';
-import { Product } from '../store/useCartStore';
+import { Product, ProductModifierGroup, ProductModifierOption } from '../store/useCartStore';
 import { X, Plus, Minus, Check } from 'lucide-react-native';
 
 interface Props {
@@ -20,17 +20,46 @@ interface Props {
   product: Product | null;
   currentQuantity: number;
   currentNotes?: string;
+  /** Mostrador conserva el platillo general y sólo expone extras con cargo. */
+  showBaseModifiers?: boolean;
   onClose: () => void;
-  onConfirm: (quantity: number, notes: string, customPrice?: number, customName?: string) => void;
+  onConfirm: (
+    quantity: number,
+    notes: string,
+    customPrice?: number,
+    customName?: string,
+    selectedModifierOptionIds?: string[],
+  ) => void;
 }
 
 const PRESET_ADD_AMOUNTS = [5, 10, 20, 30, 40, 50];
+
+export const hasPaidModifiers = (product: Product): boolean => Boolean(
+  product.modifierGroups?.some(group =>
+    group.options.some(option => (option.priceDelta || 0) !== 0),
+  ),
+);
+
+const getVisibleModifierGroups = (
+  product: Product,
+  showBaseModifiers: boolean,
+): ProductModifierGroup[] => {
+  if (showBaseModifiers) return product.modifierGroups || [];
+
+  return (product.modifierGroups || []).flatMap(group => {
+    const paidOptions = group.options.filter(option => (option.priceDelta || 0) !== 0);
+    return paidOptions.length > 0
+      ? [{ ...group, minSelections: 0, maxSelections: 1, options: paidOptions }]
+      : [];
+  });
+};
 
 export const QuantityModal: React.FC<Props> = ({
   visible,
   product,
   currentQuantity,
   currentNotes = '',
+  showBaseModifiers = true,
   onClose,
   onConfirm,
 }) => {
@@ -41,6 +70,7 @@ export const QuantityModal: React.FC<Props> = ({
   const [customName, setCustomName] = useState<string>('');
   const [customVariants, setCustomVariants] = useState<{ id: string; name: string }[]>([]);
   const [selectedVariantsList, setSelectedVariantsList] = useState<string[]>([]);
+  const [selectedModifierOptionIds, setSelectedModifierOptionIds] = useState<string[]>([]);
   const [newVariantInput, setNewVariantInput] = useState<string>('');
   const [isKeyboardVisible, setIsKeyboardVisible] = useState<boolean>(false);
 
@@ -70,7 +100,7 @@ export const QuantityModal: React.FC<Props> = ({
       setNotes(currentNotes || '');
       setCustomPriceStr(product.price > 0 ? product.price.toString() : '');
       setCustomName(product.name || 'Extra Personalizado');
-      const baseVariants = product.variants ? [...product.variants] : [];
+      const baseVariants = showBaseModifiers && product.variants ? [...product.variants] : [];
       setCustomVariants(baseVariants);
       setNewVariantInput('');
       if (baseVariants.length > 0) {
@@ -78,21 +108,42 @@ export const QuantityModal: React.FC<Props> = ({
       } else {
         setSelectedVariantsList([]);
       }
+      const availableOptionIds = new Set(
+        getVisibleModifierGroups(product, showBaseModifiers)
+          .flatMap(group => group.options.map(option => option.id)),
+      );
+      const existingSelection = (product.selectedModifierOptionIds || [])
+        .filter(optionId => availableOptionIds.has(optionId));
+      const defaults = getVisibleModifierGroups(product, showBaseModifiers).flatMap(group => (
+        group.options.slice(0, group.minSelections || 0).map(option => option.id)
+      ));
+      setSelectedModifierOptionIds(existingSelection.length > 0 ? existingSelection : defaults);
     }
-  }, [visible, currentQuantity, currentNotes, product]);
+  }, [visible, currentQuantity, currentNotes, product, showBaseModifiers]);
 
   if (!product) return null;
 
   const maxAllowedVariants = 1;
+  const modifierGroups = getVisibleModifierGroups(product, showBaseModifiers);
 
   const isCustomPriceMode = Boolean(product.isCustomPrice);
   const parsedCustomPrice = parseFloat(customPriceStr);
   const basePrice = isCustomPriceMode
     ? isNaN(parsedCustomPrice) ? 0 : parsedCustomPrice
-    : product.price;
-  const effectivePrice = basePrice;
+    : product.price - (product.modifierTotal || 0);
+  const selectedModifierOptions = modifierGroups.flatMap(group =>
+    group.options.filter(option => selectedModifierOptionIds.includes(option.id)),
+  );
+  const modifiersPrice = selectedModifierOptions.reduce(
+    (sum, option) => sum + (option.priceDelta || 0),
+    0,
+  );
+  const effectivePrice = basePrice + modifiersPrice;
 
-  const variantsSummary = selectedVariantsList.join(' / ');
+  const variantsSummary = [
+    ...selectedVariantsList,
+    ...selectedModifierOptions.map(option => option.name),
+  ].join(' / ');
 
   const displayName = variantsSummary
     ? `${product.name} (${variantsSummary})`
@@ -134,6 +185,29 @@ export const QuantityModal: React.FC<Props> = ({
     setNewVariantInput('');
   };
 
+  const toggleModifierOption = (group: ProductModifierGroup, option: ProductModifierOption) => {
+    const selectedInGroup = group.options
+      .filter(candidate => selectedModifierOptionIds.includes(candidate.id))
+      .map(candidate => candidate.id);
+    const isSelected = selectedInGroup.includes(option.id);
+    const minSelections = group.minSelections || 0;
+    const maxSelections = Math.max(1, group.maxSelections || 1);
+
+    if (isSelected) {
+      if (selectedInGroup.length <= minSelections) return;
+      setSelectedModifierOptionIds(current => current.filter(optionId => optionId !== option.id));
+      return;
+    }
+
+    setSelectedModifierOptionIds(current => {
+      const withoutGroup = current.filter(optionId => !group.options.some(candidate => candidate.id === optionId));
+      const nextForGroup = maxSelections === 1
+        ? [option.id]
+        : [...selectedInGroup.slice(-(maxSelections - 1)), option.id];
+      return [...withoutGroup, ...nextForGroup];
+    });
+  };
+
   const handleConfirm = () => {
     const finalNotes = notes.trim();
 
@@ -141,11 +215,13 @@ export const QuantityModal: React.FC<Props> = ({
       ? `${product.name} (${variantsSummary})`
       : undefined;
 
+    const hasConfiguration = selectedVariantsList.length > 0 || selectedModifierOptions.length > 0;
     onConfirm(
       Math.max(1, quantity),
       finalNotes,
-      isCustomPriceMode ? effectivePrice : undefined,
-      finalVariantName || (isCustomPriceMode ? customName.trim() : undefined)
+      isCustomPriceMode || hasConfiguration ? effectivePrice : undefined,
+      finalVariantName || (isCustomPriceMode ? customName.trim() : undefined),
+      selectedModifierOptions.map(option => option.id),
     );
     onClose();
   };
@@ -183,6 +259,45 @@ export const QuantityModal: React.FC<Props> = ({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={[styles.scrollContent, isKeyboardVisible && styles.scrollContentKeyboardActive]}
           >
+            {modifierGroups.map((group) => {
+              const isOptionalSingleChoice = (group.minSelections || 0) === 0
+                && (group.maxSelections || 1) === 1
+                && group.options.length === 1;
+              return (
+                <View key={group.id} style={styles.modifierSection}>
+                  <Text style={styles.sectionLabel}>
+                    {group.label}{(group.minSelections || 0) > 0 ? ' *' : ''}
+                  </Text>
+                  <View style={isOptionalSingleChoice ? styles.modifierCheckboxList : styles.variantsGrid}>
+                    {group.options.map((option) => {
+                      const isSelected = selectedModifierOptionIds.includes(option.id);
+                      const priceLabel = option.priceDelta
+                        ? ` +$${option.priceDelta.toFixed(2)}`
+                        : '';
+                      return (
+                        <TouchableOpacity
+                          key={option.id}
+                          style={isOptionalSingleChoice
+                            ? [styles.modifierCheckbox, isSelected && styles.modifierCheckboxActive]
+                            : [styles.variantChip, isSelected && styles.variantChipActive]}
+                          onPress={() => toggleModifierOption(group, option)}
+                          activeOpacity={0.7}
+                        >
+                          {isSelected && <Check size={13} color="#ffffff" style={styles.variantCheckIcon} />}
+                          <Text style={isOptionalSingleChoice
+                            ? [styles.modifierCheckboxText, isSelected && styles.modifierCheckboxTextActive]
+                            : [styles.variantChipText, isSelected && styles.variantChipTextActive]}
+                          >
+                            {option.name}{priceLabel}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
+
             {customVariants.length > 0 && (
               <View style={styles.variantsSection}>
                 <Text style={styles.sectionLabel}>
@@ -678,6 +793,34 @@ const styles = StyleSheet.create({
   },
   variantsSection: {
     marginBottom: 16,
+  },
+  modifierSection: {
+    marginBottom: 16,
+  },
+  modifierCheckboxList: {
+    gap: 8,
+  },
+  modifierCheckbox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff0f3',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  modifierCheckboxActive: {
+    backgroundColor: '#b3006c',
+    borderColor: '#b3006c',
+  },
+  modifierCheckboxText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#5a3f49',
+  },
+  modifierCheckboxTextActive: {
+    color: '#ffffff',
   },
   variantsGrid: {
     flexDirection: 'row',

@@ -7,7 +7,7 @@ import { PaymentScreen } from './PaymentScreen';
 import { TablesScreen } from './TablesScreen';
 import { KitchenScreen } from './KitchenScreen';
 import { useCartStore } from '../store/useCartStore';
-import { Table, UtensilsCrossed, CreditCard, Sparkles, Radio, ChefHat, Database } from 'lucide-react-native';
+import { Table, UtensilsCrossed, Banknote, Sparkles, Radio, ChefHat, Database } from 'lucide-react-native';
 import { CustomAlertModal } from '../components/CustomAlertModal';
 import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
 import { SUPABASE_CONFIG } from '../config/supabaseConfig';
@@ -121,7 +121,7 @@ export function StitchGalleryScreen() {
               case 'kitchen':
                 return <ChefHat size={size} color={color} strokeWidth={isSelected ? 2.4 : 1.8} />;
               case 'payment':
-                return <CreditCard size={size} color={color} strokeWidth={isSelected ? 2.4 : 1.8} />;
+                return <Banknote size={size} color={color} strokeWidth={isSelected ? 2.4 : 1.8} />;
             }
           };
 

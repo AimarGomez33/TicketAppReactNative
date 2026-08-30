@@ -8,12 +8,17 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { useCartStore, TableStatus } from '../store/useCartStore';
+import {
+  useCartStore,
+  TableStatus,
+  getOrderDisplayLabel,
+  isTakeawayReference,
+} from '../store/useCartStore';
 import {
   Clock,
   Coffee,
   ShoppingBag,
-  CreditCard,
+  Banknote,
   BellRing,
   Database,
   Settings,
@@ -70,6 +75,7 @@ export function TablesScreen() {
   const tables = useCartStore(state => state.tables);
   const setTableNumber = useCartStore(state => state.setTableNumber);
   const setTableStatus = useCartStore(state => state.setTableStatus);
+  const createTakeawayOrder = useCartStore(state => state.createTakeawayOrder);
   const setActiveTab = useCartStore(state => state.setActiveTab);
   const clearCart = useCartStore(state => state.clearCart);
   const showCustomAlert = useCartStore(state => state.showCustomAlert);
@@ -77,6 +83,11 @@ export function TablesScreen() {
 
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [configModalVisible, setConfigModalVisible] = useState(false);
+  const activeTakeawayReferences = Object.keys(tables).filter((reference) => {
+    if (!isTakeawayReference(reference)) return false;
+    const order = tables[reference];
+    return Object.keys(order.cart).length > 0 || order.status === 'busy' || order.status === 'bill_requested';
+  });
 
   const handleSelectTable = (tableId: string) => {
     setSelectedTable(tableId === selectedTable ? null : tableId);
@@ -84,6 +95,12 @@ export function TablesScreen() {
 
   const handleGoToOrder = (tableId: string) => {
     setTableNumber(tableId);
+    setActiveTab('ordering');
+  };
+
+  const handleCreateTakeawayOrder = () => {
+    createTakeawayOrder();
+    setSelectedTable(null);
     setActiveTab('ordering');
   };
 
@@ -108,9 +125,9 @@ export function TablesScreen() {
   const handleClearTable = (tableId: string) => {
     showCustomAlert({
       type: 'error',
-      title: `¿Liberar Mesa ${tableId}?`,
-      message: `Esto borrará la comanda activa de la Mesa ${tableId} y la marcará como disponible.`,
-      confirmText: 'Sí, Liberar',
+      title: `¿Cancelar ${getOrderDisplayLabel(tableId)}?`,
+      message: `Esto borrará la comanda activa de ${getOrderDisplayLabel(tableId)}.`,
+      confirmText: 'Sí, Cancelar',
       cancelText: 'Cancelar',
       onConfirm: () => {
         setTableNumber(tableId);
@@ -211,7 +228,7 @@ export function TablesScreen() {
         <View style={styles.detailsHeader}>
           <View>
             <View style={styles.detailsTitleRow}>
-              <Text style={styles.detailsTitle}>Mesa {selectedTable}</Text>
+              <Text style={styles.detailsTitle}>{getOrderDisplayLabel(selectedTable)}</Text>
               {isBillRequested && (
                 <View style={styles.billReqBadge}>
                   <BellRing size={12} color="#FFF" />
@@ -254,7 +271,9 @@ export function TablesScreen() {
             onPress={() => handleGoToOrder(selectedTable)}
           >
             <Coffee size={16} color="#FFF" style={styles.actionBtnIcon} />
-            <Text style={styles.orderBtnText}>TOMA COMANDA</Text>
+            <Text style={styles.orderBtnText}>
+              {isTakeawayReference(selectedTable) ? 'ABRIR PEDIDO' : 'TOMA COMANDA'}
+            </Text>
           </TouchableOpacity>
 
           {status !== 'free' && cartItems.length > 0 && (
@@ -265,7 +284,7 @@ export function TablesScreen() {
               ]}
               onPress={() => handleGoToPayment(selectedTable)}
             >
-              <CreditCard size={16} color="#FFF" style={styles.actionBtnIcon} />
+              <Banknote size={16} color="#FFF" style={styles.actionBtnIcon} />
               <Text style={styles.payBtnText}>
                 {isBillRequested ? 'COBRAR CUENTA (URGENTE)' : 'COBRAR CUENTA'}
               </Text>
@@ -286,7 +305,9 @@ export function TablesScreen() {
               style={[styles.utilityBtn, styles.deleteBtn]}
               onPress={() => handleClearTable(selectedTable)}
             >
-              <Text style={styles.deleteBtnText}>Liberar Mesa</Text>
+              <Text style={styles.deleteBtnText}>
+                {isTakeawayReference(selectedTable) ? 'Cancelar Pedido' : 'Liberar Mesa'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -351,22 +372,44 @@ export function TablesScreen() {
         </View>
       </View>
 
-      {/* Botón de Pedido Rápido (Para Llevar) */}
+      {/* Cada toque abre una comanda nueva y única para llevar. */}
       <TouchableOpacity
         style={styles.quickOrderBtn}
-        onPress={() => handleGoToOrder('Llevar')}
+        onPress={handleCreateTakeawayOrder}
       >
         <ShoppingBag size={18} color="#b3006c" style={styles.quickOrderIcon} />
-        <Text style={styles.quickOrderText}>Orden Rápida (Para Llevar)</Text>
+        <Text style={styles.quickOrderText}>Nuevo Pedido Para Llevar</Text>
       </TouchableOpacity>
+
+      {activeTakeawayReferences.length > 0 && (
+        <View style={styles.takeawaySection}>
+          <Text style={styles.takeawayTitle}>PEDIDOS PARA LLEVAR ACTIVOS</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.takeawayList}>
+            {activeTakeawayReferences.map((reference) => {
+              const order = tables[reference];
+              const count = Object.values(order.cart).reduce((sum, item) => sum + item.quantity, 0);
+              return (
+                <TouchableOpacity
+                  key={reference}
+                  style={[styles.takeawayCard, selectedTable === reference && styles.takeawayCardSelected]}
+                  onPress={() => handleSelectTable(reference)}
+                  activeOpacity={0.75}
+                >
+                  <ShoppingBag size={15} color="#b3006c" />
+                  <Text style={styles.takeawayReference}>{reference}</Text>
+                  <Text style={styles.takeawayMeta}>{count} art. • {STATUS_LABELS[order.status]}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Grid de Mesas */}
       <FlatList
-        data={Object.keys(tables).sort((a, b) => {
-          if (a === 'Llevar') return 1;
-          if (b === 'Llevar') return -1;
-          return parseInt(a, 10) - parseInt(b, 10);
-        })}
+        data={Object.keys(tables)
+          .filter(tableId => !isTakeawayReference(tableId))
+          .sort((a, b) => parseInt(a, 10) - parseInt(b, 10))}
         renderItem={renderTableCard}
         keyExtractor={item => item}
         numColumns={3}
@@ -485,6 +528,45 @@ const styles = StyleSheet.create({
     color: '#b3006c',
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  takeawaySection: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  takeawayTitle: {
+    color: '#5a3f49',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    marginBottom: 7,
+  },
+  takeawayList: {
+    gap: 8,
+    paddingRight: 12,
+  },
+  takeawayCard: {
+    minWidth: 136,
+    backgroundColor: '#ffffff',
+    borderColor: '#ffd0df',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    gap: 3,
+  },
+  takeawayCardSelected: {
+    borderColor: '#b3006c',
+    borderWidth: 2,
+    backgroundColor: '#fff0f3',
+  },
+  takeawayReference: {
+    color: '#27171d',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  takeawayMeta: {
+    color: '#8e6e79',
+    fontSize: 10,
+    fontWeight: '700',
   },
   gridContent: {
     padding: 6,

@@ -8,7 +8,7 @@ import {
   ScrollView,
   Modal,
 } from 'react-native';
-import { useCartStore } from '../store/useCartStore';
+import { getOrderDisplayLabel, isTakeawayReference, useCartStore } from '../store/useCartStore';
 import {
   ChevronUp,
   Trash2,
@@ -56,7 +56,7 @@ export const CartSheet: React.FC = () => {
   const total = getTotal();
 
   // Enviar comanda a cocina e imprimir (Instantáneo + Background Printer)
-  const handleSendToKitchen = () => {
+  const handleSendToKitchen = async () => {
     if (itemCount === 0) {
       showCustomAlert({
         type: 'info',
@@ -72,13 +72,15 @@ export const CartSheet: React.FC = () => {
     const totalSnapshot = total;
     const tableSnapshot = tableNumber;
 
-    sendRoundToKitchen(tableSnapshot);
+    const wasSent = await sendRoundToKitchen(tableSnapshot);
+    if (!wasSent) return;
+
     setIsExpanded(false);
 
     showCustomAlert({
       type: 'success',
       title: `¡Comanda Enviada (Ronda #${roundToPrint})!`,
-      message: `Los platillos de la Mesa ${tableSnapshot || 'S/N'} se han enviado a cocina.`,
+      message: `Los platillos de ${tableSnapshot ? getOrderDisplayLabel(tableSnapshot) : 'S/N'} se han enviado a cocina.`,
     });
 
     // 2. Impresión en segundo plano sin congelar la app
@@ -96,8 +98,8 @@ export const CartSheet: React.FC = () => {
     if (itemCount === 0) {
       showCustomAlert({
         type: 'info',
-        title: 'Mesa Sin Consumo',
-        message: 'No puedes solicitar la cuenta de una mesa vacía.',
+        title: 'Pedido Sin Consumo',
+        message: 'No puedes solicitar cuenta de un pedido vacío.',
       });
       return;
     }
@@ -109,7 +111,7 @@ export const CartSheet: React.FC = () => {
     showCustomAlert({
       type: 'success',
       title: '¡Cuenta Solicitada!',
-      message: `Se notificó a Caja en tiempo real para el cobro de la Mesa ${tableSnapshot || 'S/N'}.`,
+      message: `Se notificó a Caja en tiempo real para el cobro de ${tableSnapshot ? getOrderDisplayLabel(tableSnapshot) : 'S/N'}.`,
     });
   };
 
@@ -172,7 +174,7 @@ export const CartSheet: React.FC = () => {
           </TouchableOpacity>
 
           {/* Botón rápido según modo */}
-          {appMode === 'detailed' ? (
+          {appMode === 'detailed' || isTakeawayReference(tableNumber) ? (
             <TouchableOpacity
               style={[styles.actionBtnHeader, pendingCount > 0 ? styles.kitchenBtnActive : styles.kitchenBtnInactive]}
               onPress={handleSendToKitchen}
@@ -220,12 +222,14 @@ export const CartSheet: React.FC = () => {
                 <View style={styles.dragHandle} />
                 <View style={styles.sheetHeader}>
                   <View>
-                    <Text style={styles.sheetTitle}>Comanda de Mesa</Text>
+                    <Text style={styles.sheetTitle}>
+                      {isTakeawayReference(tableNumber) ? 'Pedido Para Llevar' : 'Comanda de Mesa'}
+                    </Text>
                     <Text style={styles.sheetSubtitle}>Ronda Actual: #{currentRound}</Text>
                   </View>
                   <View style={styles.tableBadge}>
                     <Text style={styles.tableBadgeText}>
-                      {tableNumber ? `MESA ${tableNumber.toUpperCase()}` : 'SIN MESA'}
+                      {tableNumber ? getOrderDisplayLabel(tableNumber) : 'SIN MESA'}
                     </Text>
                   </View>
                 </View>
@@ -411,8 +415,22 @@ export const CartSheet: React.FC = () => {
           currentQuantity={editingItem.quantity}
           currentNotes={editingItem.notes}
           onClose={() => setEditingItem(null)}
-          onConfirm={(newQty, newNotes) => {
-            setQuantity(editingItem.product, newQty, newNotes);
+          onConfirm={(newQty, newNotes, customPrice, customName, selectedModifierOptionIds) => {
+            const configuredProduct = customName && customName !== editingItem.product.name
+              ? {
+                  ...editingItem.product,
+                  id: selectedModifierOptionIds?.length
+                    ? `${editingItem.product.id.split('--')[0]}--${selectedModifierOptionIds.slice().sort().join('--')}`
+                    : editingItem.product.id,
+                  menuProductId: editingItem.product.menuProductId || editingItem.product.id.split('--')[0],
+                  name: customName,
+                  price: customPrice !== undefined ? customPrice : editingItem.product.price,
+                  selectedModifierOptionIds,
+                  modifierTotal: (customPrice !== undefined ? customPrice : editingItem.product.price)
+                    - (editingItem.product.price - (editingItem.product.modifierTotal || 0)),
+                }
+              : editingItem.product;
+            setQuantity(configuredProduct, newQty, newNotes);
             setEditingItem(null);
           }}
         />

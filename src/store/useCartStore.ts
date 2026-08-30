@@ -4,7 +4,6 @@ import {
   fetchRemoteTables,
   fetchActiveOrderItems,
   syncActiveOrderToSupabase,
-  markRoundSentInSupabase,
   requestBillInSupabase,
   finalizePaymentInSupabase,
   clearTableInSupabase,
@@ -32,6 +31,20 @@ export interface Category {
   sortOrder?: number;
 }
 
+export interface ProductModifierOption {
+  id: string;
+  name: string;
+  priceDelta?: number;
+}
+
+export interface ProductModifierGroup {
+  id: string;
+  label: string;
+  minSelections?: number;
+  maxSelections?: number;
+  options: ProductModifierOption[];
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -40,7 +53,17 @@ export interface Product {
   description?: string;
   kitchenStation?: KitchenStation;
   isCustomPrice?: boolean;
+  isFavorite?: boolean;
+  favoriteOrder?: number;
+  /** ID del producto de menú en Supabase, distinto del ID de una línea configurada. */
+  menuProductId?: string;
+  /** Importe adicional total de los modificadores elegidos. */
+  modifierTotal?: number;
   variants?: { id: string; name: string; price?: number }[];
+  /** Configuración comercial que llega de menu_products.modifier_groups. */
+  modifierGroups?: ProductModifierGroup[];
+  /** Opciones elegidas para una línea ya configurada del carrito. */
+  selectedModifierOptionIds?: string[];
 }
 
 export type ItemKitchenStatus = 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready';
@@ -55,10 +78,19 @@ export interface CartItem {
 }
 
 export type TableStatus = 'free' | 'busy' | 'bill_requested' | 'cleaning';
+export type ActiveOrderType = 'table' | 'takeaway';
+export type PaymentMethod = 'cash';
+
+export const isTakeawayReference = (reference: string): boolean =>
+  reference === 'Llevar' || reference.startsWith('L-');
+
+export const getOrderDisplayLabel = (reference: string): string =>
+  isTakeawayReference(reference) ? `PARA LLEVAR ${reference}` : `MESA ${reference}`;
 
 export interface TableOrder {
   status: TableStatus;
   cart: Record<string, CartItem>;
+  orderType?: ActiveOrderType;
   currentRound?: number;
   lastUpdated?: string;
   waiterName?: string;
@@ -70,7 +102,7 @@ export interface OrderHistoryItem {
   tableNumber: string;
   items: CartItem[];
   total: number;
-  paymentMethod?: 'cash' | 'card' | 'transfer';
+  paymentMethod?: PaymentMethod;
   amountPaid?: number;
   change?: number;
   timestamp: string;
@@ -113,6 +145,7 @@ interface CartState {
 
   // Acciones de Comanda Local y Sincronizada
   setTableNumber: (table: string) => void;
+  createTakeawayOrder: () => string;
   setTableStatus: (table: string, status: TableStatus) => void;
   addItem: (product: Product, notes?: string) => void;
   addQuantity: (product: Product, quantityToAdd: number, notes?: string) => void;
@@ -131,7 +164,7 @@ interface CartState {
   requestBillForTable: (tableNumber?: string) => Promise<boolean>;
 
   // Flujo Operador -> Cobro
-  completePayment: (paymentMethod: 'cash' | 'card' | 'transfer', amountPaid: number, change: number) => Promise<void>;
+  completePayment: (paymentMethod: PaymentMethod, amountPaid: number, change: number) => Promise<void>;
   
   // Flujo Secundario: Venta Rápida / Comanda Manual en Caja
   quickSaleCart: Record<string, CartItem>;
@@ -144,7 +177,7 @@ interface CartState {
   getQuickSaleItemCount: () => number;
   createQuickSaleOrder: (
     tableNumber?: string,
-    paymentMethod?: 'cash' | 'card' | 'transfer',
+    paymentMethod?: PaymentMethod,
     amountPaid?: number,
     changeGiven?: number,
   ) => Promise<OrderHistoryItem | null>;
@@ -152,7 +185,7 @@ interface CartState {
   cancelEditQuickSaleOrder: () => void;
   updateAndSaveQuickSaleOrder: (orderId: string, tableNumber?: string) => Promise<boolean>;
   reprintQuickSaleOrder: (orderId: string) => Promise<boolean>;
-  finalizeQuickSale: (paymentMethod?: 'cash' | 'card' | 'transfer', amountPaid?: number, change?: number) => Promise<boolean>;
+  finalizeQuickSale: (paymentMethod?: PaymentMethod, amountPaid?: number, change?: number) => Promise<boolean>;
 
   // Catálogo de Menú y Extras Personalizados
   menuProducts: Product[];
@@ -172,12 +205,15 @@ const initialTables = (): Record<string, TableOrder> => {
   for (let i = 1; i <= 12; i++) {
     t[i.toString()] = { status: 'free', cart: {}, currentRound: 1 };
   }
-  t.Llevar = { status: 'free', cart: {}, currentRound: 1 };
   return t;
 };
 
-// Helper con debounce para evitar llamadas masivas simultáneas a Supabase
-let syncTimeoutId: any = null;
+const createTakeawayReference = () =>
+  `L-${Date.now().toString(36).slice(-5).toUpperCase()}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
+
+// Cada mesa tiene su propio debounce. Un cambio en Mesa 2 nunca debe cancelar
+// la sincronización pendiente de Mesa 1.
+const syncTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 let menuLoadSequence = 0;
 const debouncedSync = (
   tableNumber: string,
@@ -203,12 +239,19 @@ const debouncedSync = (
   });
 
   if (!isSupabaseConfigured()) return;
-  if (syncTimeoutId) {
-    clearTimeout(syncTimeoutId);
-  }
-  syncTimeoutId = setTimeout(() => {
+  const previousTimeout = syncTimeouts.get(tableNumber);
+  if (previousTimeout) clearTimeout(previousTimeout);
+  const timeout = setTimeout(() => {
+    syncTimeouts.delete(tableNumber);
     runInBackground(() => syncActiveOrderToSupabase(tableNumber, items, total, waiterName), 'debouncedSync:Supabase');
   }, 350);
+  syncTimeouts.set(tableNumber, timeout);
+};
+
+const cancelPendingSync = (tableNumber: string) => {
+  const timeout = syncTimeouts.get(tableNumber);
+  if (timeout) clearTimeout(timeout);
+  syncTimeouts.delete(tableNumber);
 };
 
 export const useCartStore = create<CartState>((set, get) => ({
@@ -253,9 +296,25 @@ export const useCartStore = create<CartState>((set, get) => ({
         Object.fromEntries(
           Object.entries(cart).map(([id, item]) => [
             id,
-            productById.has(item.product.id)
-              ? { ...item, product: { ...item.product, ...productById.get(item.product.id)! } }
-              : item,
+            (() => {
+              const menuProductId = item.product.menuProductId || item.product.id;
+              const remoteProduct = productById.get(menuProductId);
+              if (!remoteProduct) return item;
+
+              const modifierTotal = item.product.modifierTotal || 0;
+              return {
+                ...item,
+                product: {
+                  ...item.product,
+                  ...remoteProduct,
+                  id: item.product.id,
+                  name: item.product.name,
+                  price: remoteProduct.price + modifierTotal,
+                  menuProductId,
+                  modifierTotal,
+                },
+              };
+            })(),
           ]),
         );
 
@@ -360,12 +419,14 @@ export const useCartStore = create<CartState>((set, get) => ({
                 ...updated[tblNum],
                 status: remoteTables[tblNum].status,
                 cart: cartsByTable[tblNum] || {},
+                orderType: isTakeawayReference(tblNum) ? 'takeaway' : 'table',
                 lastUpdated: remoteTables[tblNum].lastUpdated || updated[tblNum].lastUpdated,
               };
             } else {
               updated[tblNum] = {
                 status: remoteTables[tblNum].status,
                 cart: cartsByTable[tblNum] || {},
+                orderType: isTakeawayReference(tblNum) ? 'takeaway' : 'table',
                 currentRound: 1,
                 lastUpdated: remoteTables[tblNum].lastUpdated,
               };
@@ -387,6 +448,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           updatedTables[tbl] = {
             ...currentTableOrder,
             status: tableUpdate.status,
+            orderType: currentTableOrder.orderType || (isTakeawayReference(tbl) ? 'takeaway' : 'table'),
             // Una mesa liberada/cobrada no puede conservar la comanda de otra
             // terminal en memoria; la BD ya confirmó que no hay orden activa.
             cart: (tableUpdate.status === 'free' || tableUpdate.status === 'cleaning')
@@ -450,6 +512,7 @@ export const useCartStore = create<CartState>((set, get) => ({
             status: cartSyncPayload.status,
             cart: cartSyncPayload.cart || {},
             currentRound: cartSyncPayload.currentRound || 1,
+            orderType: isTakeawayReference(tbl) ? 'takeaway' : 'table',
             waiterName: cartSyncPayload.waiterName,
             lastUpdated: new Date().toLocaleTimeString(),
             isBillRequested: cartSyncPayload.isBillRequested,
@@ -568,7 +631,12 @@ export const useCartStore = create<CartState>((set, get) => ({
     // Cargar carrito de la nueva mesa
     const nextTableOrder = updatedTables[tableNumber] || { status: 'free', cart: {}, currentRound: 1 };
     if (tableNumber && !updatedTables[tableNumber]) {
-      updatedTables[tableNumber] = { status: 'free', cart: {}, currentRound: 1 };
+      updatedTables[tableNumber] = {
+        status: 'free',
+        cart: {},
+        currentRound: 1,
+        orderType: isTakeawayReference(tableNumber) ? 'takeaway' : 'table',
+      };
     }
 
     set({
@@ -581,6 +649,24 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (tableNumber && isSupabaseConfigured()) {
       get().loadTableCartFromRemote(tableNumber);
     }
+  },
+
+  createTakeawayOrder: () => {
+    const takeawayReference = createTakeawayReference();
+    set((state) => ({
+      tables: {
+        ...state.tables,
+        [takeawayReference]: {
+          status: 'free',
+          cart: {},
+          currentRound: 1,
+          orderType: 'takeaway',
+          lastUpdated: new Date().toLocaleTimeString(),
+        },
+      },
+    }));
+    get().setTableNumber(takeawayReference);
+    return takeawayReference;
   },
 
   setTableStatus: (table, status) => {
@@ -809,12 +895,16 @@ export const useCartStore = create<CartState>((set, get) => ({
     set((prev) => {
       const updatedTables = { ...prev.tables };
       if (activeTable) {
-        updatedTables[activeTable] = {
-          status: 'free',
-          cart: {},
-          currentRound: 1,
-          lastUpdated: new Date().toLocaleTimeString(),
-        };
+        if (isTakeawayReference(activeTable)) {
+          delete updatedTables[activeTable];
+        } else {
+          updatedTables[activeTable] = {
+            status: 'free',
+            cart: {},
+            currentRound: 1,
+            lastUpdated: new Date().toLocaleTimeString(),
+          };
+        }
       }
       return {
         cart: {},
@@ -856,15 +946,46 @@ export const useCartStore = create<CartState>((set, get) => ({
     const currentRound = currentTableOrder?.currentRound || 1;
     const nextRound = currentRound + 1;
 
-    // Actualizar todos los ítems del carrito local como 'sent_to_kitchen'
+    const sourceCart = state.tables[tableToUse]?.cart || state.cart;
+    // Sólo la ronda pendiente pasa a cocina; artículos ya listos o en
+    // preparación no se regresan accidentalmente a "enviados".
     const updatedCart: Record<string, CartItem> = {};
-    Object.values(state.cart).forEach((item) => {
+    Object.values(sourceCart).forEach((item) => {
       updatedCart[item.product.id] = {
         ...item,
-        status: 'sent_to_kitchen',
+        status: item.status === 'pending' ? 'sent_to_kitchen' : item.status,
         round: item.round || currentRound,
       };
     });
+
+    const itemsToSync = Object.values(updatedCart);
+    const totalToSync = itemsToSync.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+
+    // Enviar a cocina es un punto de confirmación: persiste de inmediato y
+    // espera a Supabase antes de continuar. Así no depende del debounce ni de
+    // que el broadcast temporal alcance a las demás terminales.
+    if (isSupabaseConfigured()) {
+      cancelPendingSync(tableToUse);
+      try {
+        const orderId = await syncActiveOrderToSupabase(
+          tableToUse,
+          itemsToSync,
+          totalToSync,
+          currentTableOrder?.waiterName,
+        );
+        if (!orderId) {
+          throw new Error('Supabase no devolvió el identificador de la orden.');
+        }
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        get().showCustomAlert({
+          type: 'error',
+          title: 'Comanda no sincronizada',
+          message: `Supabase rechazó la comanda: ${detail}`,
+        });
+        return false;
+      }
+    }
 
     broadcastTableState({
       tableNumber: tableToUse,
@@ -889,10 +1010,6 @@ export const useCartStore = create<CartState>((set, get) => ({
         tables: updatedTables,
       };
     });
-
-    if (isSupabaseConfigured()) {
-      runInBackground(() => markRoundSentInSupabase(tableToUse, currentRound), 'sendRoundToKitchen:Supabase');
-    }
 
     return true;
   },
@@ -969,12 +1086,16 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     set((prev) => {
       const updatedTables = { ...prev.tables };
-      updatedTables[activeTable] = {
-        status: 'cleaning',
-        cart: {},
-        currentRound: 1,
-        lastUpdated: new Date().toLocaleTimeString(),
-      };
+      if (isTakeawayReference(activeTable)) {
+        delete updatedTables[activeTable];
+      } else {
+        updatedTables[activeTable] = {
+          status: 'cleaning',
+          cart: {},
+          currentRound: 1,
+          lastUpdated: new Date().toLocaleTimeString(),
+        };
+      }
 
       return {
         cart: {},
@@ -1055,8 +1176,8 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   createQuickSaleOrder: async (
-    tableNumber = 'Llevar',
-    paymentMethod: 'cash' | 'card' | 'transfer' = 'cash',
+    tableNumber = 'MOSTRADOR',
+    paymentMethod: PaymentMethod = 'cash',
     amountPaid?: number,
     changeGiven?: number,
   ) => {
@@ -1065,7 +1186,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (items.length === 0) return null;
 
     const total = state.getQuickSaleTotal();
-    const cleanTable = tableNumber.trim() || 'Llevar';
+    const cleanTable = tableNumber.trim() || 'MOSTRADOR';
     const orderId = `ORD-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
     const paid = amountPaid !== undefined ? amountPaid : total;
     const change = changeGiven !== undefined ? changeGiven : Math.max(0, paid - total);

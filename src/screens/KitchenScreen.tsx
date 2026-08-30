@@ -13,6 +13,8 @@ import {
   KitchenStation,
   ItemKitchenStatus,
   CartItem,
+  getOrderDisplayLabel,
+  isTakeawayReference,
 } from '../store/useCartStore';
 import { printTicketTCP } from '../services/printerService';
 import {
@@ -59,6 +61,7 @@ export const KitchenScreen: React.FC = () => {
 
       return {
         tableNumber: tbl,
+        orderType: order.orderType || (isTakeawayReference(tbl) ? 'takeaway' : 'table'),
         status: order.status,
         currentRound: order.currentRound || 1,
         lastUpdated: order.lastUpdated || '',
@@ -83,7 +86,7 @@ export const KitchenScreen: React.FC = () => {
 
       showCustomAlert({
         title: 'Ticket de Cocina Enviado',
-        message: `Comanda de la Mesa ${tableNumber.toUpperCase()} enviada a la impresora de cocina exitosamente.`,
+        message: `Comanda de ${getOrderDisplayLabel(tableNumber)} enviada a la impresora de cocina exitosamente.`,
         type: 'success',
       });
     } catch (err: any) {
@@ -103,7 +106,7 @@ export const KitchenScreen: React.FC = () => {
     });
     showCustomAlert({
       title: '¡Comanda Lista!',
-      message: `Todos los platillos de la Mesa ${tableNumber.toUpperCase()} han sido marcados como listos.`,
+      message: `Todos los platillos de ${getOrderDisplayLabel(tableNumber)} han sido marcados como listos.`,
       type: 'success',
     });
   };
@@ -241,7 +244,7 @@ export const KitchenScreen: React.FC = () => {
               <View style={styles.cardHeader}>
                 <View style={styles.tableBadge}>
                   <Text style={styles.tableBadgeText}>
-                    MESA {tableOrder.tableNumber.toUpperCase()}
+                    {getOrderDisplayLabel(tableOrder.tableNumber)}
                   </Text>
                 </View>
 

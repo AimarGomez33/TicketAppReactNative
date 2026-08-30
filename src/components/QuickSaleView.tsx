@@ -1,5 +1,5 @@
 // src/components/QuickSaleView.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
   Product,
 } from '../store/useCartStore';
 import { printTicketTCP } from '../services/printerService';
-import { QuantityModal } from './QuantityModal';
+import { QuantityModal, hasPaidModifiers } from './QuantityModal';
 import { CustomExtraModal } from './CustomExtraModal';
 import {
   Search,
@@ -27,28 +27,25 @@ import {
   Zap,
   X,
   CircleDollarSign,
-  CreditCard,
-  Banknote,
-  Send,
+  Star,
 } from 'lucide-react-native';
 
 type SubViewTab = 'editor' | 'history';
 
-const QUICK_TABLES = ['Llevar', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+const QUICK_TABLES = ['MOSTRADOR', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 
 export const QuickSaleView: React.FC = () => {
   const [subTab, setSubTab] = useState<SubViewTab>('editor');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedTable, setSelectedTable] = useState<string>('Llevar');
+  const [selectedTable, setSelectedTable] = useState<string>('MOSTRADOR');
 
   // Modales
   const [modalProduct, setModalProduct] = useState<Product | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [extraModalVisible, setExtraModalVisible] = useState<boolean>(false);
-  const [payModalVisible, setPayModalVisible] = useState<boolean>(false);
-  const [payMethod, setPayMethod] = useState<'cash' | 'card' | 'transfer'>('cash');
   const [isCartExpanded, setIsCartExpanded] = useState<boolean>(false);
+  const searchInputRef = useRef<TextInput>(null);
 
   const menuProducts = useCartStore((state) => state.menuProducts);
   const menuCategories = useCartStore((state) => state.menuCategories);
@@ -98,12 +95,66 @@ export const QuickSaleView: React.FC = () => {
     });
   }, [menuProducts, searchQuery, selectedCategory]);
 
+  const favoriteProducts = useMemo(() => (
+    menuProducts
+      .filter(product => product.isFavorite)
+      .sort((first, second) => (first.favoriteOrder || 0) - (second.favoriteOrder || 0))
+      .slice(0, 20)
+  ), [menuProducts]);
+
   const openQuantityModal = (product: Product) => {
     setModalProduct(product);
     setModalVisible(true);
   };
 
-  const handleModalConfirm = (qty: number, notes: string, customPrice?: number, customName?: string) => {
+  const selectQuickSaleProduct = (product: Product) => {
+    if (product.isCustomPrice) {
+      openQuantityModal(product);
+      return;
+    }
+    addQuickSaleItem(product, 1);
+  };
+
+  const openPaidExtras = (product: Product) => {
+    if (hasPaidModifiers(product)) {
+      openQuantityModal(product);
+    }
+  };
+
+  const handleQuickSearchSubmit = () => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    if (!query) return;
+
+    // Sólo agrega automáticamente si el resultado es inequívoco: nunca se
+    // adivina un platillo distinto durante una venta rápida.
+    const exactMatch = menuProducts.find(
+      product => product.name.trim().toLocaleLowerCase() === query,
+    );
+    const uniqueMatch = availableProducts.length === 1 ? availableProducts[0] : undefined;
+    const product = exactMatch || uniqueMatch;
+
+    if (!product) return;
+
+    selectQuickSaleProduct(product);
+    setSearchQuery('');
+    searchInputRef.current?.focus();
+  };
+
+  const decreaseQuickSaleItem = (product: Product, quantity: number, notes: string) => {
+    if (quantity <= 1) {
+      removeQuickSaleItem(product.id);
+      return;
+    }
+    setQuickSaleQuantity(product, quantity - 1, notes);
+  };
+
+  const handleModalConfirm = (
+    qty: number,
+    notes: string,
+    customPrice?: number,
+    customName?: string,
+    selectedModifierOptionIds?: string[],
+  ) => {
     if (modalProduct) {
       if (modalProduct.isCustomPrice) {
         const finalPrice = customPrice !== undefined ? customPrice : modalProduct.price;
@@ -113,12 +164,18 @@ export const QuickSaleView: React.FC = () => {
         return;
       }
       if (customName && customName !== modalProduct.name) {
-        const variantSlug = customName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const configurationKey = selectedModifierOptionIds?.length
+          ? selectedModifierOptionIds.slice().sort().join('--')
+          : customName.toLowerCase().replace(/[^a-z0-9]/g, '-');
         const variantProduct: Product = {
           ...modalProduct,
-          id: `${modalProduct.id}-${variantSlug}`,
+          id: `${modalProduct.id}--${configurationKey}`,
+          menuProductId: modalProduct.menuProductId || modalProduct.id,
           name: customName,
           price: customPrice !== undefined ? customPrice : modalProduct.price,
+          selectedModifierOptionIds,
+          modifierTotal: (customPrice !== undefined ? customPrice : modalProduct.price)
+            - (modalProduct.price - (modalProduct.modifierTotal || 0)),
         };
         setQuickSaleQuantity(variantProduct, qty, notes);
         setModalVisible(false);
@@ -132,22 +189,15 @@ export const QuickSaleView: React.FC = () => {
     setModalVisible(false);
   };
 
-  const openPayModal = () => {
-    setPayMethod('cash');
-    setPayModalVisible(true);
-  };
-
   // Cobro Instantáneo y No Bloqueante
-  const handleProcessQuickPayment = (method?: 'cash' | 'card' | 'transfer') => {
+  const handleProcessQuickPayment = () => {
     if (cartItems.length === 0) return;
-    const currentTable = selectedTable.trim() || 'Llevar';
-    const effectiveMethod = method || payMethod;
+    const currentTable = selectedTable.trim() || 'MOSTRADOR';
 
-    setPayModalVisible(false);
     setIsCartExpanded(false);
 
     // 1. Guardar orden en local de forma inmediata (0ms)
-    createQuickSaleOrder(currentTable, effectiveMethod, total, 0);
+    createQuickSaleOrder(currentTable, 'cash', total, 0);
 
     showCustomAlert({
       title: '¡Cobro de Mostrador Exitoso!',
@@ -158,7 +208,7 @@ export const QuickSaleView: React.FC = () => {
     // 2. Transmisión a impresora en background sin congelar la app
     printTicketTCP(currentTable, cartItems, total, {
       showPrices: true,
-      paymentMethod: effectiveMethod,
+      paymentMethod: 'cash',
     }).catch((err: any) => {
       console.warn('Fallo impresión en background:', err);
     });
@@ -175,7 +225,7 @@ export const QuickSaleView: React.FC = () => {
       return;
     }
 
-    const currentTable = selectedTable.trim() || 'Llevar';
+    const currentTable = selectedTable.trim() || 'MOSTRADOR';
     setIsCartExpanded(false);
 
     if (editingQuickSaleOrderId) {
@@ -209,13 +259,13 @@ export const QuickSaleView: React.FC = () => {
 
   const handleEditFromHistory = (orderId: string, orderTable: string) => {
     loadQuickSaleOrderForEdit(orderId);
-    setSelectedTable(orderTable || 'Llevar');
+    setSelectedTable(orderTable || 'MOSTRADOR');
     setSubTab('editor');
   };
 
   const handleCancelEdit = () => {
     cancelEditQuickSaleOrder();
-    setSelectedTable('Llevar');
+    setSelectedTable('MOSTRADOR');
   };
 
   const categoriesToUse = menuCategories;
@@ -289,7 +339,7 @@ export const QuickSaleView: React.FC = () => {
                     <Text
                       style={[styles.tableChipText, isSelected && styles.tableChipTextActive]}
                     >
-                      {t === 'Llevar' ? 'Para Llevar' : `Mesa ${t}`}
+                      {t === 'MOSTRADOR' ? 'Mostrador' : `Mesa ${t}`}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -302,11 +352,15 @@ export const QuickSaleView: React.FC = () => {
             <View style={styles.searchContainer}>
               <Search size={16} color="#8e6e79" />
               <TextInput
+                ref={searchInputRef}
                 style={styles.searchInput}
-                placeholder="Buscar platillos en mostrador..."
+                placeholder="Buscar y presiona Enter para agregar..."
                 placeholderTextColor="#8e6e79"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                onSubmitEditing={handleQuickSearchSubmit}
+                returnKeyType="done"
+                blurOnSubmit={false}
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -324,6 +378,81 @@ export const QuickSaleView: React.FC = () => {
               <Text style={styles.extraButtonText}>+ Extra $</Text>
             </TouchableOpacity>
           </View>
+
+          {searchQuery.length === 0 && favoriteProducts.length > 0 && (
+            <View style={styles.favoritesSection}>
+              <View style={styles.favoritesHeader}>
+                <View style={styles.favoritesTitleRow}>
+                  <Star size={14} color="#b3006c" fill="#b3006c" />
+                  <Text style={styles.favoritesTitle}>FAVORITOS DE MOSTRADOR</Text>
+                </View>
+                <Text style={styles.favoritesHint}>Un toque para agregar</Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.favoritesList}
+              >
+                {favoriteProducts.map((product) => {
+                  const qty = quickSaleCart[product.id]?.quantity || 0;
+                  return (
+                    <TouchableOpacity
+                      key={product.id}
+                      style={[styles.favoriteCard, qty > 0 && styles.favoriteCardActive]}
+                      onPress={() => selectQuickSaleProduct(product)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.favoriteName} numberOfLines={2}>{product.name}</Text>
+                      <View style={styles.favoriteFooter}>
+                        <Text style={styles.favoritePrice}>${product.price.toFixed(2)}</Text>
+                        <View style={styles.favoriteActions}>
+                          {hasPaidModifiers(product) && (
+                            <TouchableOpacity
+                              style={styles.favoriteExtraBtn}
+                              onPress={(event) => {
+                                event.stopPropagation();
+                                openPaidExtras(product);
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <CircleDollarSign size={13} color="#b3006c" />
+                            </TouchableOpacity>
+                          )}
+                          {qty > 0 && (
+                            <TouchableOpacity
+                              style={styles.favoriteQuantityBtn}
+                              onPress={(event) => {
+                                event.stopPropagation();
+                                decreaseQuickSaleItem(product, qty, quickSaleCart[product.id]?.notes || '');
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Minus size={12} color="#5a3f49" />
+                            </TouchableOpacity>
+                          )}
+                          <TouchableOpacity
+                            style={styles.favoriteAddBtn}
+                            onPress={(event) => {
+                              event.stopPropagation();
+                              selectQuickSaleProduct(product);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Plus size={13} color="#ffffff" />
+                          </TouchableOpacity>
+                          {qty > 0 && (
+                            <View style={styles.favoriteQtyBadge}>
+                              <Text style={styles.favoriteQtyText}>{qty}</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
           {/* Categorías (Chips Amplios) */}
           {searchQuery.length === 0 && (
@@ -387,7 +516,7 @@ export const QuickSaleView: React.FC = () => {
                   <TouchableOpacity
                     key={product.id}
                     style={[styles.productCard, qty > 0 && styles.productCardActive]}
-                    onPress={() => openQuantityModal(product)}
+                    onPress={() => selectQuickSaleProduct(product)}
                     activeOpacity={0.85}
                   >
                     <View style={styles.cardTop}>
@@ -414,12 +543,24 @@ export const QuickSaleView: React.FC = () => {
                       <Text style={styles.cardPrice}>${product.price.toFixed(2)}</Text>
 
                       <View style={styles.cardActions}>
+                        {hasPaidModifiers(product) && (
+                          <TouchableOpacity
+                            style={styles.cardExtraBtn}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              openPaidExtras(product);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <CircleDollarSign size={13} color="#b3006c" />
+                          </TouchableOpacity>
+                        )}
                         {qty > 0 && (
                           <TouchableOpacity
                             style={styles.cardMinusBtn}
                             onPress={(e) => {
                               e.stopPropagation();
-                              removeQuickSaleItem(product.id);
+                              decreaseQuickSaleItem(product, qty, currentItem?.notes || '');
                             }}
                             activeOpacity={0.7}
                           >
@@ -431,11 +572,7 @@ export const QuickSaleView: React.FC = () => {
                           style={styles.cardPlusBtn}
                           onPress={(e) => {
                             e.stopPropagation();
-                            if (product.variants && product.variants.length > 0) {
-                              openQuantityModal(product);
-                            } else {
-                              addQuickSaleItem(product, 1);
-                            }
+                            selectQuickSaleProduct(product);
                           }}
                           activeOpacity={0.7}
                         >
@@ -481,12 +618,11 @@ export const QuickSaleView: React.FC = () => {
 
               <TouchableOpacity
                 style={[styles.payOrderBtn, cartItems.length === 0 && styles.payOrderBtnDisabled]}
-                onPress={openPayModal}
+                onPress={handleProcessQuickPayment}
                 disabled={cartItems.length === 0}
                 activeOpacity={0.85}
               >
-                <Banknote size={16} color="#FFF" />
-                <Text style={styles.payOrderBtnText}>COBRAR (${total.toFixed(2)})</Text>
+                <Text style={styles.payOrderBtnText}>COBRAR EFECTIVO (${total.toFixed(2)})</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -535,9 +671,27 @@ export const QuickSaleView: React.FC = () => {
                         <Text style={styles.expandedItemPrice}>
                           ${(item.product.price * item.quantity).toFixed(2)}
                         </Text>
+                        <View style={styles.expandedQuantityActions}>
+                          <TouchableOpacity
+                            style={styles.expandedQuantityBtn}
+                            onPress={() => decreaseQuickSaleItem(item.product, item.quantity, item.notes || '')}
+                            accessibilityLabel={`Restar ${item.product.name}`}
+                          >
+                            <Minus size={14} color="#5a3f49" />
+                          </TouchableOpacity>
+                          <Text style={styles.expandedQuantityValue}>{item.quantity}</Text>
+                          <TouchableOpacity
+                            style={styles.expandedQuantityBtn}
+                            onPress={() => addQuickSaleItem(item.product, 1, item.notes)}
+                            accessibilityLabel={`Agregar ${item.product.name}`}
+                          >
+                            <Plus size={14} color="#b3006c" />
+                          </TouchableOpacity>
+                        </View>
                         <TouchableOpacity
                           style={styles.removeItemBtn}
                           onPress={() => removeQuickSaleItem(item.product.id)}
+                          accessibilityLabel={`Eliminar ${item.product.name}`}
                         >
                           <Trash2 size={14} color="#ba1a1a" />
                         </TouchableOpacity>
@@ -561,7 +715,7 @@ export const QuickSaleView: React.FC = () => {
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.expandedPayBtn}
-                      onPress={openPayModal}
+                      onPress={handleProcessQuickPayment}
                     >
                       <Text style={styles.expandedPayBtnText}>Pagar Ahora</Text>
                     </TouchableOpacity>
@@ -630,69 +784,13 @@ export const QuickSaleView: React.FC = () => {
         </ScrollView>
       )}
 
-      {/* Modal de Cobro Rápido */}
-      <Modal
-        visible={payModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPayModalVisible(false)}
-      >
-        <View style={styles.payModalOverlay}>
-          <View style={styles.payModalCard}>
-            <View style={styles.payModalHeader}>
-              <Text style={styles.payModalTitle}>Cobrar Pedido ({selectedTable})</Text>
-              <TouchableOpacity onPress={() => setPayModalVisible(false)}>
-                <X size={18} color="#5a3f49" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.payModalTotal}>${total.toFixed(2)}</Text>
-
-            <Text style={styles.payMethodLabel}>SELECCIONA MÉTODO DE PAGO</Text>
-            <View style={styles.payMethodsGrid}>
-              <TouchableOpacity
-                style={[styles.payMethodBtn, payMethod === 'cash' && styles.payMethodBtnActive]}
-                onPress={() => handleProcessQuickPayment('cash')}
-                activeOpacity={0.8}
-              >
-                <Banknote size={20} color={payMethod === 'cash' ? '#FFF' : '#b3006c'} />
-                <Text style={[styles.payMethodText, payMethod === 'cash' && styles.payMethodTextActive]}>
-                  Efectivo
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.payMethodBtn, payMethod === 'card' && styles.payMethodBtnActive]}
-                onPress={() => handleProcessQuickPayment('card')}
-                activeOpacity={0.8}
-              >
-                <CreditCard size={20} color={payMethod === 'card' ? '#FFF' : '#b3006c'} />
-                <Text style={[styles.payMethodText, payMethod === 'card' && styles.payMethodTextActive]}>
-                  Tarjeta
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.payMethodBtn, payMethod === 'transfer' && styles.payMethodBtnActive]}
-                onPress={() => handleProcessQuickPayment('transfer')}
-                activeOpacity={0.8}
-              >
-                <Send size={20} color={payMethod === 'transfer' ? '#FFF' : '#b3006c'} />
-                <Text style={[styles.payMethodText, payMethod === 'transfer' && styles.payMethodTextActive]}>
-                  Transferencia
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
       {/* Modal de Cantidad / Notas / Combo */}
       <QuantityModal
         visible={modalVisible}
         product={modalProduct}
         currentQuantity={modalProduct ? (quickSaleCart[modalProduct.id]?.quantity || 0) : 0}
         currentNotes={modalProduct ? (quickSaleCart[modalProduct.id]?.notes || '') : ''}
+        showBaseModifiers={false}
         onClose={() => setModalVisible(false)}
         onConfirm={handleModalConfirm}
       />
@@ -860,6 +958,119 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  favoritesSection: {
+    backgroundColor: '#ffffff',
+    paddingTop: 2,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffe0ea',
+  },
+  favoritesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    marginBottom: 7,
+  },
+  favoritesTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  favoritesTitle: {
+    color: '#5a3f49',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  favoritesHint: {
+    color: '#8e6e79',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  favoritesList: {
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  favoriteCard: {
+    width: 126,
+    minHeight: 72,
+    backgroundColor: '#fff8f8',
+    borderColor: '#ffd0df',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 9,
+    justifyContent: 'space-between',
+  },
+  favoriteCardActive: {
+    backgroundColor: '#fff0f3',
+    borderColor: '#b3006c',
+    borderWidth: 1.5,
+  },
+  favoriteName: {
+    color: '#27171d',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 15,
+  },
+  favoriteFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 5,
+  },
+  favoritePrice: {
+    color: '#b3006c',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  favoriteActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  favoriteExtraBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff0f3',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favoriteQuantityBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff0f3',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favoriteAddBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#b3006c',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favoriteQtyBadge: {
+    minWidth: 19,
+    height: 19,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#b3006c',
+  },
+  favoriteQtyText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '900',
+  },
   categoriesWrapper: {
     height: 46,
     backgroundColor: '#ffffff',
@@ -991,6 +1202,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+  },
+  cardExtraBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#fff0f3',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardMinusBtn: {
     width: 26,
@@ -1150,6 +1371,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
+  expandedQuantityActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  expandedQuantityBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff0f3',
+    borderColor: '#e2bdc9',
+    borderWidth: 1,
+  },
+  expandedQuantityValue: {
+    minWidth: 16,
+    color: '#5a3f49',
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   expandedItemPrice: {
     fontSize: 13,
     fontWeight: 'bold',
@@ -1308,73 +1551,5 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: 'bold',
-  },
-  payModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(39, 27, 32, 0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  payModalCard: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    alignItems: 'center',
-  },
-  payModalHeader: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  payModalTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#27171d',
-  },
-  payModalTotal: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#059669',
-    marginVertical: 10,
-  },
-  payMethodLabel: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#8e6e79',
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  payMethodsGrid: {
-    width: '100%',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  payMethodBtn: {
-    flex: 1,
-    backgroundColor: '#fff0f3',
-    borderColor: '#ffe0ea',
-    borderWidth: 1.5,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  payMethodBtnActive: {
-    backgroundColor: '#059669',
-    borderColor: '#059669',
-  },
-  payMethodText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#5a3f49',
-  },
-  payMethodTextActive: {
-    color: '#ffffff',
   },
 });

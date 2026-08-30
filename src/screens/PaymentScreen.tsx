@@ -7,11 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { useCartStore } from '../store/useCartStore';
+import { getOrderDisplayLabel, isTakeawayReference, useCartStore } from '../store/useCartStore';
 import {
-  CreditCard,
-  Banknote,
-  Send,
   Printer,
   ChevronLeft,
   XCircle,
@@ -21,7 +18,6 @@ import { printTicketTCP } from '../services/printerService';
 import { QuickSaleView } from '../components/QuickSaleView';
 import { UtensilsCrossed, Zap } from 'lucide-react-native';
 
-type PaymentMethod = 'cash' | 'card' | 'transfer';
 type CashierViewMode = 'table' | 'quick';
 
 export function PaymentScreen() {
@@ -40,8 +36,6 @@ export function PaymentScreen() {
 
   // Local state - Nunca forzar modo automáticamente para no atrapar al cajero
   const [cashierMode, setCashierMode] = useState<CashierViewMode>('quick');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [isProcessing, _setIsProcessing] = useState(false);
 
   const total = getTotal();
   const items = Object.values(cart);
@@ -130,7 +124,7 @@ export function PaymentScreen() {
         </View>
 
         <ScrollView contentContainerStyle={styles.emptyScrollContent}>
-          <Text style={styles.sectionHeaderTitle}>MESAS CON CONSUMO PENDIENTE DE COBRO</Text>
+          <Text style={styles.sectionHeaderTitle}>CUENTAS PENDIENTES DE COBRO</Text>
           
           {activeTablesList.length > 0 ? (
             <View style={styles.activeTablesGrid}>
@@ -149,7 +143,7 @@ export function PaymentScreen() {
                     activeOpacity={0.8}
                   >
                     <View style={styles.tableCardHeader}>
-                      <Text style={styles.tableCardNumber}>MESA {t.tableNumber.toUpperCase()}</Text>
+                      <Text style={styles.tableCardNumber}>{getOrderDisplayLabel(t.tableNumber)}</Text>
                       {isBillReq ? (
                         <View style={styles.billReqBadge}>
                           <Text style={styles.billReqBadgeText}>PIDIÓ CUENTA</Text>
@@ -165,7 +159,9 @@ export function PaymentScreen() {
                     <Text style={styles.tableCardSubtext}>{t.itemCount} platillos en comanda</Text>
 
                     <View style={styles.chargeActionBtn}>
-                      <Text style={styles.chargeActionBtnText}>COBRAR ESTA MESA →</Text>
+                      <Text style={styles.chargeActionBtnText}>
+                        {isTakeawayReference(t.tableNumber) ? 'COBRAR PEDIDO →' : 'COBRAR ESTA MESA →'}
+                      </Text>
                     </View>
                   </TouchableOpacity>
                 );
@@ -208,15 +204,13 @@ export function PaymentScreen() {
     const tableSnapshot = tableNumber;
     const itemsSnapshot = [...items];
     const totalSnapshot = total;
-    const methodSnapshot = paymentMethod;
-
     // 1. Guardar cobro y liberar mesa de forma instantánea (0ms)
-    completePayment(methodSnapshot, totalSnapshot, 0);
+    completePayment('cash', totalSnapshot, 0);
 
     showCustomAlert({
       type: 'success',
       title: '¡Cobro Exitoso!',
-      message: `La cuenta de la Mesa ${tableSnapshot} se ha cerrado y la mesa ha quedado lista.`,
+      message: `La cuenta de ${getOrderDisplayLabel(tableSnapshot)} se ha cerrado.`,
       confirmText: 'Volver a Mesas',
       onConfirm: () => {
         setActiveTab('tables');
@@ -227,7 +221,7 @@ export function PaymentScreen() {
     printTicketTCP(tableSnapshot, itemsSnapshot, totalSnapshot, {
       showPrices: true,
       isKitchenComanda: false,
-      paymentMethod: methodSnapshot,
+      paymentMethod: 'cash',
     }).catch((err) => {
       console.warn('Aviso impresora ticket cobro:', err);
     });
@@ -244,7 +238,7 @@ export function PaymentScreen() {
           <ChevronLeft size={20} color="#b3006c" />
           <Text style={styles.backHeaderBtnText}>Mesas</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cobro - Mesa {tableNumber}</Text>
+        <Text style={styles.headerTitle}>Cobro - {getOrderDisplayLabel(tableNumber)}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -301,85 +295,11 @@ export function PaymentScreen() {
           </View>
         </View>
 
-        {/* Métodos de Pago */}
-        <Text style={styles.sectionTitle}>Método de Pago</Text>
-        <View style={styles.methodsContainer}>
-          <TouchableOpacity
-            style={[
-              styles.methodBtn,
-              paymentMethod === 'cash' && styles.activeMethodBtn,
-            ]}
-            onPress={() => setPaymentMethod('cash')}
-          >
-            <Banknote
-              size={20}
-              color={paymentMethod === 'cash' ? '#ffffff' : '#ab286c'}
-            />
-            <Text
-              style={[
-                styles.methodText,
-                paymentMethod === 'cash' && styles.activeMethodText,
-              ]}
-            >
-              Efectivo
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.methodBtn,
-              paymentMethod === 'card' && styles.activeMethodBtn,
-            ]}
-            onPress={() => setPaymentMethod('card')}
-          >
-            <CreditCard
-              size={20}
-              color={paymentMethod === 'card' ? '#ffffff' : '#ab286c'}
-            />
-            <Text
-              style={[
-                styles.methodText,
-                paymentMethod === 'card' && styles.activeMethodText,
-              ]}
-            >
-              Tarjeta
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.methodBtn,
-              paymentMethod === 'transfer' && styles.activeMethodBtn,
-            ]}
-            onPress={() => setPaymentMethod('transfer')}
-          >
-            <Send
-              size={20}
-              color={paymentMethod === 'transfer' ? '#ffffff' : '#ab286c'}
-            />
-            <Text
-              style={[
-                styles.methodText,
-                paymentMethod === 'transfer' && styles.activeMethodText,
-              ]}
-            >
-              Transf.
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Botón Directo de Cobro e Impresión */}
-        <TouchableOpacity
-          style={[
-            styles.processBtn,
-            isProcessing && styles.processBtnDisabled,
-          ]}
-          onPress={handleProcessPayment}
-          disabled={isProcessing}
-        >
+        <TouchableOpacity style={styles.processBtn} onPress={handleProcessPayment}>
           <Printer size={18} color="#FFF" style={styles.processBtnIcon} />
           <Text style={styles.processBtnText}>
-            {isProcessing ? 'CERRANDO E IMPRIMIENDO TICKET...' : `COBRAR E IMPRIMIR ($${total.toFixed(2)})`}
+            COBRAR EFECTIVO E IMPRIMIR ($${total.toFixed(2)})
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -572,157 +492,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '900',
   },
-  sectionTitle: {
-    color: '#5a3f49',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 10,
-    letterSpacing: 0.5,
-  },
-  methodsContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  methodBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingVertical: 12,
-    gap: 6,
-  },
-  activeMethodBtn: {
-    backgroundColor: '#b3006c',
-    borderColor: 'transparent',
-  },
-  methodText: {
-    color: '#ab286c',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  activeMethodText: {
-    color: '#ffffff',
-  },
-  cashSection: {
-    backgroundColor: '#fff0f3',
-    borderRadius: 12,
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 20,
-  },
-  cashSummaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-  cashSumBox: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-  },
-  cashSumLabel: {
-    color: '#5a3f49',
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  cashSumValue: {
-    color: '#27171d',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  quickCashContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
-  },
-  quickCashBtn: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flex: 1,
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  quickCashText: {
-    color: '#ab286c',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  exactCashBtn: {
-    backgroundColor: '#ffd9e5',
-    borderColor: 'transparent',
-  },
-  exactCashText: {
-    color: '#b3006c',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  keypad: {
-    gap: 6,
-  },
-  keypadRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  keyBtn: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    borderRadius: 8,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  keyText: {
-    color: '#27171d',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  clearKeyBtn: {
-    backgroundColor: 'rgba(186, 26, 26, 0.08)',
-    borderColor: '#ffe0ea',
-  },
-  clearKeyText: {
-    color: '#ba1a1a',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  cardInfoContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderColor: '#ffe0ea',
-    borderWidth: 1,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  cardInfoText: {
-    color: '#27171d',
-    fontSize: 14,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  cardInfoSubText: {
-    color: '#5a3f49',
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 6,
-  },
   processBtn: {
     backgroundColor: '#b3006c',
     borderRadius: 20,
@@ -734,10 +503,6 @@ const styles = StyleSheet.create({
   processBtnIcon: {
     marginRight: 8,
   },
-  processBtnDisabled: {
-    backgroundColor: '#8e6e79',
-    opacity: 0.6,
-  },
   processBtnText: {
     color: '#ffffff',
     fontSize: 13,
@@ -746,12 +511,6 @@ const styles = StyleSheet.create({
   },
   itemInfo: {
     flex: 1,
-  },
-  cashSumValueSufficient: {
-    color: '#10B981',
-  },
-  cashSumValueInsufficient: {
-    color: '#8e6e79',
   },
   ticketConfigRow: {
     flexDirection: 'row',

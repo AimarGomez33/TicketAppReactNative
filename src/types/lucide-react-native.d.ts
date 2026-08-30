@@ -34,10 +34,10 @@ declare module 'lucide-react-native' {
   export const ChevronDown: Icon;
   export const XCircle: Icon;
   export const Tag: Icon;
-  export const CreditCard: Icon;
   export const Banknote: Icon;
   export const Send: Icon;
   export const Sparkles: Icon;
+  export const Star: Icon;
   export const Radio: Icon;
   export const ChefHat: Icon;
   export const Table: Icon;

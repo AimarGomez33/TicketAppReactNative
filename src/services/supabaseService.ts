@@ -2,11 +2,27 @@
 import 'react-native-url-polyfill/auto';
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { SUPABASE_CONFIG, isSupabaseConfigured } from '../config/supabaseConfig';
-import { CartItem, TableStatus, Product, Category } from '../store/useCartStore';
+import {
+  CartItem,
+  TableStatus,
+  Product,
+  Category,
+  ProductModifierGroup,
+  PaymentMethod,
+} from '../store/useCartStore';
 
 let supabaseClient: SupabaseClient | null = null;
 let realtimeChannel: RealtimeChannel | null = null;
 let sessionInitialization: Promise<boolean> | null = null;
+
+const describeSupabaseError = (error: unknown): string => {
+  if (error && typeof error === 'object') {
+    const candidate = error as { code?: string; message?: string; details?: string; hint?: string };
+    const parts = [candidate.code, candidate.message, candidate.details, candidate.hint].filter(Boolean);
+    if (parts.length > 0) return parts.join(' — ');
+  }
+  return error instanceof Error ? error.message : String(error);
+};
 
 export const getSupabase = (): SupabaseClient | null => {
   if (!isSupabaseConfigured()) {
@@ -139,8 +155,10 @@ export const fetchActiveOrderItems = async (tableNumber: string): Promise<{ item
     const items: CartItem[] = itemsData.map((row: any) => ({
       product: {
         id: row.product_id,
+        menuProductId: row.menu_product_id || row.product_id,
         name: row.product_name,
         price: Number(row.price),
+        modifierTotal: Number(row.modifier_total || 0),
         category: row.category || 'general',
         kitchenStation: row.kitchen_station || 'station_a',
       },
@@ -168,18 +186,22 @@ export const syncActiveOrderToSupabase = async (
   waiterName = 'Mesero'
 ): Promise<string | null> => {
   const supabase = getSupabase();
-  if (!supabase || !tableNumber) return null;
+  if (!supabase || !tableNumber) {
+    throw new Error('Supabase no está configurado o la mesa no es válida.');
+  }
 
   try {
     // 1. Buscar o crear la orden activa
-    const { data: existingOrder } = await supabase
+    const { data: existingOrder, error: existingOrderError } = await supabase
       .from('orders')
       .select('id')
       .eq('table_number', tableNumber)
       .eq('status', 'active')
       .maybeSingle();
+    if (existingOrderError) throw existingOrderError;
 
     let orderId = existingOrder?.id;
+    const orderType = tableNumber.startsWith('L-') ? 'takeaway' : 'table';
 
     if (!orderId && items.length > 0) {
       const { data: newOrder, error: createError } = await supabase
@@ -188,6 +210,7 @@ export const syncActiveOrderToSupabase = async (
           table_number: tableNumber,
           status: 'active',
           total,
+          order_type: orderType,
         })
         .select('id')
         .single();
@@ -195,24 +218,26 @@ export const syncActiveOrderToSupabase = async (
       if (createError) throw createError;
       orderId = newOrder.id;
     } else if (orderId) {
-      await supabase
+      const { error: updateOrderError } = await supabase
         .from('orders')
-        .update({ total })
+        .update({ total, order_type: orderType })
         .eq('id', orderId);
+      if (updateOrderError) throw updateOrderError;
     }
 
     // 2. Sincronizar ítems si hay orden
     if (orderId && items.length > 0) {
       // Eliminar y reinsertar o upsert
       const rows = items.map(item => ({
-        id: item.dbId || undefined,
         order_id: orderId,
         table_number: tableNumber,
         product_id: item.product.id,
+        menu_product_id: item.product.menuProductId || item.product.id,
         product_name: item.product.name,
         category: item.product.category,
         kitchen_station: item.product.kitchenStation || 'station_a',
         price: item.product.price,
+        modifier_total: item.product.modifierTotal || 0,
         quantity: item.quantity,
         notes: item.notes || '',
         round_number: item.round || 1,
@@ -244,7 +269,7 @@ export const syncActiveOrderToSupabase = async (
     return orderId;
   } catch (err) {
     console.warn('Error syncing order to Supabase:', err);
-    return null;
+    throw new Error(describeSupabaseError(err));
   }
 };
 
@@ -370,7 +395,7 @@ export const updateOrderItemStatusInSupabase = async (
  */
 export const finalizePaymentInSupabase = async (
   tableNumber: string,
-  paymentMethod: 'cash' | 'card' | 'transfer',
+  paymentMethod: PaymentMethod,
   amountPaid: number,
   change: number,
   total: number
@@ -474,6 +499,48 @@ export const fetchMenuCategoriesFromSupabase = async (): Promise<Category[] | nu
 /**
  * Carga los platillos / productos activos del menú desde Supabase
  */
+const normalizeModifierGroups = (value: unknown): ProductModifierGroup[] => {
+  const parsed = typeof value === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return [];
+        }
+      })()
+    : value;
+
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.flatMap((group: any) => {
+    if (!group || typeof group.id !== 'string' || typeof group.label !== 'string' || !Array.isArray(group.options)) {
+      return [];
+    }
+
+    const options = group.options.flatMap((option: any) => (
+      option && typeof option.id === 'string' && typeof option.name === 'string'
+        ? [{
+            id: option.id,
+            name: option.name,
+            priceDelta: Number.isFinite(Number(option.priceDelta ?? option.price_delta))
+              ? Number(option.priceDelta ?? option.price_delta)
+              : 0,
+          }]
+        : []
+    ));
+
+    return options.length > 0
+      ? [{
+          id: group.id,
+          label: group.label,
+          minSelections: Math.max(0, Number(group.minSelections ?? group.min_selections) || 0),
+          maxSelections: Math.max(1, Number(group.maxSelections ?? group.max_selections) || 1),
+          options,
+        }]
+      : [];
+  });
+};
+
 export const fetchMenuProductsFromSupabase = async (): Promise<Product[] | null> => {
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -481,7 +548,7 @@ export const fetchMenuProductsFromSupabase = async (): Promise<Product[] | null>
   try {
     const { data, error } = await supabase
       .from('menu_products')
-      .select('id, name, price, category_id, description, kitchen_station, is_custom_price, sort_order')
+      .select('id, name, price, category_id, description, kitchen_station, is_custom_price, is_favorite, favorite_order, modifier_groups, sort_order')
       .eq('is_active', true)
       .order('sort_order', { ascending: true });
 
@@ -492,12 +559,16 @@ export const fetchMenuProductsFromSupabase = async (): Promise<Product[] | null>
 
     return (data || []).map((row: any) => ({
       id: row.id,
+      menuProductId: row.id,
       name: row.name,
       price: Number(row.price),
       category: row.category_id || 'extras',
       description: row.description || '',
       kitchenStation: row.kitchen_station as any,
       isCustomPrice: Boolean(row.is_custom_price),
+      isFavorite: Boolean(row.is_favorite),
+      favoriteOrder: Number(row.favorite_order || 0),
+      modifierGroups: normalizeModifierGroups(row.modifier_groups),
     }));
   } catch (err) {
     console.warn('Network error fetching products from Supabase:', err);

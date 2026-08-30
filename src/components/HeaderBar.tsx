@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, Text, TouchableOpacity } from 'react-native';
-import { useCartStore } from '../store/useCartStore';
+import { getOrderDisplayLabel, useCartStore } from '../store/useCartStore';
 import { Search, Printer, Wifi, Menu, Database, Utensils, Layers, CircleDollarSign } from 'lucide-react-native';
 import { SupabaseConfigModal } from './SupabaseConfigModal';
 import { CustomExtraModal } from './CustomExtraModal';
@@ -47,7 +47,7 @@ export const HeaderBar: React.FC<Props> = ({
               onPress={() => setActiveTab('tables')}
             >
               <Text style={styles.tableBadgeText}>
-                {tableNumber ? `MESA ${tableNumber.toUpperCase()}` : 'SIN MESA'}
+                {tableNumber ? getOrderDisplayLabel(tableNumber) : 'SIN MESA'}
               </Text>
             </TouchableOpacity>
 
