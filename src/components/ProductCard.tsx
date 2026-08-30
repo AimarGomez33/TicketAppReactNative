@@ -4,6 +4,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Product, useCartStore } from '../store/useCartStore';
 import { Plus, Minus, Layers, FileText } from 'lucide-react-native';
 import { QuantityModal } from './QuantityModal';
+import { buildConfiguredProductId } from '../domain/products/configuredProductId';
 
 interface Props {
   product: Product;
@@ -37,12 +38,13 @@ export const ProductCard: React.FC<Props> = ({ product }) => {
     }
 
     if (customName && customName !== product.name) {
-      const configurationKey = selectedModifierOptionIds?.length
-        ? selectedModifierOptionIds.slice().sort().join('--')
-        : customName.toLowerCase().replace(/[^a-z0-9]/g, '-');
       const variantProduct: Product = {
         ...product,
-        id: `${product.id}--${configurationKey}`,
+        id: buildConfiguredProductId({
+          baseProductId: product.menuProductId || product.id,
+          modifierOptionIds: selectedModifierOptionIds,
+          variantIds: selectedModifierOptionIds?.length ? [] : [customName],
+        }),
         menuProductId: product.menuProductId || product.id,
         name: customName,
         price: customPrice !== undefined ? customPrice : product.price,

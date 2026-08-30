@@ -20,6 +20,25 @@ import {
 import { isSupabaseConfigured } from '../config/supabaseConfig';
 import { printTicketTCP } from '../services/printerService';
 import { runInBackground } from '../services/asyncWorkerPool';
+import { OrderSyncDebouncer } from '../services/orderSyncDebouncer';
+import { loadSupabaseRuntimeConfiguration } from '../services/runtimeSupabaseConfigService';
+import {
+  createTakeawayReference,
+  getOrderReferenceType,
+  isTakeawayReference,
+} from '../domain/orders/orderReferences';
+import {
+  calculateCartItemCount,
+  calculateCartTotal,
+  refreshCartProductsFromCatalog,
+} from '../domain/orders/cartCalculations';
+
+export {
+  createTakeawayReference,
+  getOrderDisplayLabel,
+  isTakeawayReference,
+  type OrderReference,
+} from '../domain/orders/orderReferences';
 
 export type KitchenStation = 'station_a' | 'station_b';
 
@@ -80,12 +99,6 @@ export interface CartItem {
 export type TableStatus = 'free' | 'busy' | 'bill_requested' | 'cleaning';
 export type ActiveOrderType = 'table' | 'takeaway';
 export type PaymentMethod = 'cash';
-
-export const isTakeawayReference = (reference: string): boolean =>
-  reference === 'Llevar' || reference.startsWith('L-');
-
-export const getOrderDisplayLabel = (reference: string): string =>
-  isTakeawayReference(reference) ? `PARA LLEVAR ${reference}` : `MESA ${reference}`;
 
 export interface TableOrder {
   status: TableStatus;
@@ -195,7 +208,7 @@ interface CartState {
 
   // Inicialización y Sincronización Supabase
   initializeTables: () => void;
-  initRealtimeSync: () => void;
+  initRealtimeSync: () => Promise<void>;
   loadTableCartFromRemote: (tableNumber: string) => Promise<void>;
 }
 
@@ -208,12 +221,9 @@ const initialTables = (): Record<string, TableOrder> => {
   return t;
 };
 
-const createTakeawayReference = () =>
-  `L-${Date.now().toString(36).slice(-5).toUpperCase()}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
-
 // Cada mesa tiene su propio debounce. Un cambio en Mesa 2 nunca debe cancelar
 // la sincronización pendiente de Mesa 1.
-const syncTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+const orderSyncDebouncer = new OrderSyncDebouncer();
 let menuLoadSequence = 0;
 const debouncedSync = (
   tableNumber: string,
@@ -239,19 +249,13 @@ const debouncedSync = (
   });
 
   if (!isSupabaseConfigured()) return;
-  const previousTimeout = syncTimeouts.get(tableNumber);
-  if (previousTimeout) clearTimeout(previousTimeout);
-  const timeout = setTimeout(() => {
-    syncTimeouts.delete(tableNumber);
+  orderSyncDebouncer.schedule(tableNumber, () => {
     runInBackground(() => syncActiveOrderToSupabase(tableNumber, items, total, waiterName), 'debouncedSync:Supabase');
   }, 350);
-  syncTimeouts.set(tableNumber, timeout);
 };
 
 const cancelPendingSync = (tableNumber: string) => {
-  const timeout = syncTimeouts.get(tableNumber);
-  if (timeout) clearTimeout(timeout);
-  syncTimeouts.delete(tableNumber);
+  orderSyncDebouncer.cancel(tableNumber);
 };
 
 export const useCartStore = create<CartState>((set, get) => ({
@@ -291,32 +295,8 @@ export const useCartStore = create<CartState>((set, get) => ({
       // Además de refrescar las tarjetas de menú, se actualizan los productos
       // ya agregados a mesas/mostrador. Así un cambio de precio hecho en
       // Supabase se refleja inmediatamente en totales y tickets abiertos.
-      const productById = new Map(remoteProds.map(product => [product.id, product]));
       const refreshCart = (cart: Record<string, CartItem>) =>
-        Object.fromEntries(
-          Object.entries(cart).map(([id, item]) => [
-            id,
-            (() => {
-              const menuProductId = item.product.menuProductId || item.product.id;
-              const remoteProduct = productById.get(menuProductId);
-              if (!remoteProduct) return item;
-
-              const modifierTotal = item.product.modifierTotal || 0;
-              return {
-                ...item,
-                product: {
-                  ...item.product,
-                  ...remoteProduct,
-                  id: item.product.id,
-                  name: item.product.name,
-                  price: remoteProduct.price + modifierTotal,
-                  menuProductId,
-                  modifierTotal,
-                },
-              };
-            })(),
-          ]),
-        );
+        refreshCartProductsFromCatalog(cart, remoteProds);
 
       set(state => {
         const tables = Object.fromEntries(
@@ -380,6 +360,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   // Inicializar suscripción y carga en tiempo real desde Supabase
   initRealtimeSync: async () => {
+    await loadSupabaseRuntimeConfiguration();
     if (!isSupabaseConfigured()) {
       return;
     }
@@ -419,14 +400,14 @@ export const useCartStore = create<CartState>((set, get) => ({
                 ...updated[tblNum],
                 status: remoteTables[tblNum].status,
                 cart: cartsByTable[tblNum] || {},
-                orderType: isTakeawayReference(tblNum) ? 'takeaway' : 'table',
+                orderType: getOrderReferenceType(tblNum),
                 lastUpdated: remoteTables[tblNum].lastUpdated || updated[tblNum].lastUpdated,
               };
             } else {
               updated[tblNum] = {
                 status: remoteTables[tblNum].status,
                 cart: cartsByTable[tblNum] || {},
-                orderType: isTakeawayReference(tblNum) ? 'takeaway' : 'table',
+                orderType: getOrderReferenceType(tblNum),
                 currentRound: 1,
                 lastUpdated: remoteTables[tblNum].lastUpdated,
               };
@@ -448,7 +429,7 @@ export const useCartStore = create<CartState>((set, get) => ({
           updatedTables[tbl] = {
             ...currentTableOrder,
             status: tableUpdate.status,
-            orderType: currentTableOrder.orderType || (isTakeawayReference(tbl) ? 'takeaway' : 'table'),
+            orderType: currentTableOrder.orderType || getOrderReferenceType(tbl),
             // Una mesa liberada/cobrada no puede conservar la comanda de otra
             // terminal en memoria; la BD ya confirmó que no hay orden activa.
             cart: (tableUpdate.status === 'free' || tableUpdate.status === 'cleaning')
@@ -512,7 +493,7 @@ export const useCartStore = create<CartState>((set, get) => ({
             status: cartSyncPayload.status,
             cart: cartSyncPayload.cart || {},
             currentRound: cartSyncPayload.currentRound || 1,
-            orderType: isTakeawayReference(tbl) ? 'takeaway' : 'table',
+            orderType: getOrderReferenceType(tbl),
             waiterName: cartSyncPayload.waiterName,
             lastUpdated: new Date().toLocaleTimeString(),
             isBillRequested: cartSyncPayload.isBillRequested,
@@ -635,7 +616,7 @@ export const useCartStore = create<CartState>((set, get) => ({
         status: 'free',
         cart: {},
         currentRound: 1,
-        orderType: isTakeawayReference(tableNumber) ? 'takeaway' : 'table',
+        orderType: getOrderReferenceType(tableNumber),
       };
     }
 
@@ -730,7 +711,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
         // Sincronizar en segundo plano con Supabase con debounce
         if (isSupabaseConfigured()) {
-          const total = Object.values(updatedCart).reduce((s, it) => s + it.product.price * it.quantity, 0);
+          const total = calculateCartTotal(updatedCart);
           debouncedSync(state.tableNumber, Object.values(updatedCart), total);
         }
       }
@@ -772,7 +753,7 @@ export const useCartStore = create<CartState>((set, get) => ({
         };
 
         if (isSupabaseConfigured()) {
-          const total = Object.values(updatedCart).reduce((s, it) => s + it.product.price * it.quantity, 0);
+          const total = calculateCartTotal(updatedCart);
           debouncedSync(state.tableNumber, Object.values(updatedCart), total);
         }
       }
@@ -809,7 +790,7 @@ export const useCartStore = create<CartState>((set, get) => ({
         };
 
         if (isSupabaseConfigured()) {
-          const total = Object.values(updatedCart).reduce((s, it) => s + it.product.price * it.quantity, 0);
+          const total = calculateCartTotal(updatedCart);
           debouncedSync(state.tableNumber, Object.values(updatedCart), total);
         }
       }
@@ -914,16 +895,11 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   getTotal: () => {
-    const cart = get().cart;
-    return Object.values(cart).reduce(
-      (sum, item) => sum + item.product.price * item.quantity,
-      0
-    );
+    return calculateCartTotal(get().cart);
   },
 
   getItemCount: () => {
-    const cart = get().cart;
-    return Object.values(cart).reduce((sum, item) => sum + item.quantity, 0);
+    return calculateCartItemCount(get().cart);
   },
 
   getPendingItemsCount: () => {
@@ -959,7 +935,7 @@ export const useCartStore = create<CartState>((set, get) => ({
     });
 
     const itemsToSync = Object.values(updatedCart);
-    const totalToSync = itemsToSync.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const totalToSync = calculateCartTotal(updatedCart);
 
     // Enviar a cocina es un punto de confirmación: persiste de inmediato y
     // espera a Supabase antes de continuar. Así no depende del debounce ni de
@@ -1166,13 +1142,11 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   getQuickSaleTotal: () => {
-    const items = Object.values(get().quickSaleCart);
-    return items.reduce((sum, it) => sum + it.product.price * it.quantity, 0);
+    return calculateCartTotal(get().quickSaleCart);
   },
 
   getQuickSaleItemCount: () => {
-    const items = Object.values(get().quickSaleCart);
-    return items.reduce((sum, it) => sum + it.quantity, 0);
+    return calculateCartItemCount(get().quickSaleCart);
   },
 
   createQuickSaleOrder: async (

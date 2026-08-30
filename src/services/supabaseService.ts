@@ -2,9 +2,11 @@
 import 'react-native-url-polyfill/auto';
 import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 import { SUPABASE_CONFIG, isSupabaseConfigured } from '../config/supabaseConfig';
+import { getOrderReferenceType } from '../domain/orders/orderReferences';
 import {
   CartItem,
   TableStatus,
+  KitchenStation,
   Product,
   Category,
   ProductModifierGroup,
@@ -79,6 +81,171 @@ export interface RemoteOrderUpdate {
   items?: CartItem[];
 }
 
+export interface SupabaseTableStateRow {
+  table_number: string;
+  status: TableStatus;
+  last_updated?: string;
+  waiter_name?: string;
+  active_order_id?: string | null;
+}
+
+export interface SupabaseOrderRow {
+  id: string;
+  table_number?: string;
+  status?: string;
+  total?: number;
+  payment_method?: string;
+}
+
+export interface SupabaseOrderItemRow {
+  id?: string;
+  order_id?: string;
+  table_number: string;
+  product_id: string;
+  menu_product_id?: string;
+  product_name: string;
+  category?: string;
+  kitchen_station?: KitchenStation;
+  price: number;
+  modifier_total?: number;
+  quantity: number;
+  notes?: string;
+  round_number?: number;
+  status?: CartItem['status'];
+}
+
+export interface SupabaseMenuCategoryRow {
+  id: string;
+  name: string;
+  icon_name?: string;
+  sort_order?: number;
+}
+
+export interface SupabaseMenuProductRow {
+  id: string;
+  name: string;
+  price: number;
+  category_id?: string;
+  description?: string;
+  kitchen_station?: KitchenStation;
+  is_custom_price?: boolean;
+  is_favorite?: boolean;
+  favorite_order?: number;
+  modifier_groups?: unknown;
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is UnknownRecord =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const readString = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
+const readNumber = (value: unknown): number | undefined => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const readBoolean = (value: unknown): boolean | undefined =>
+  typeof value === 'boolean' ? value : undefined;
+
+const parseTableStatus = (value: unknown): TableStatus | undefined =>
+  value === 'free' || value === 'busy' || value === 'bill_requested' || value === 'cleaning'
+    ? value
+    : undefined;
+
+const parseKitchenStation = (value: unknown): KitchenStation | undefined =>
+  value === 'station_a' || value === 'station_b' ? value : undefined;
+
+const parseKitchenItemStatus = (value: unknown): CartItem['status'] | undefined =>
+  value === 'pending' || value === 'sent_to_kitchen' || value === 'preparing' || value === 'ready'
+    ? value
+    : undefined;
+
+const parseTableStateRow = (value: unknown): SupabaseTableStateRow | null => {
+  if (!isRecord(value)) return null;
+  const tableNumber = readString(value.table_number);
+  const status = parseTableStatus(value.status);
+  if (!tableNumber || !status) return null;
+
+  return {
+    table_number: tableNumber,
+    status,
+    last_updated: readString(value.last_updated),
+    waiter_name: readString(value.waiter_name),
+    active_order_id: readString(value.active_order_id) || (value.active_order_id === null ? null : undefined),
+  };
+};
+
+const parseOrderRow = (value: unknown): SupabaseOrderRow | null => {
+  if (!isRecord(value)) return null;
+  const id = readString(value.id);
+  if (!id) return null;
+  return {
+    id,
+    table_number: readString(value.table_number),
+    status: readString(value.status),
+    total: readNumber(value.total),
+    payment_method: readString(value.payment_method),
+  };
+};
+
+const parseOrderItemRow = (value: unknown): SupabaseOrderItemRow | null => {
+  if (!isRecord(value)) return null;
+  const tableNumber = readString(value.table_number);
+  const productId = readString(value.product_id);
+  const productName = readString(value.product_name);
+  const price = readNumber(value.price);
+  const quantity = readNumber(value.quantity);
+  if (!tableNumber || !productId || !productName || price === undefined || quantity === undefined) return null;
+
+  return {
+    id: readString(value.id),
+    order_id: readString(value.order_id),
+    table_number: tableNumber,
+    product_id: productId,
+    menu_product_id: readString(value.menu_product_id),
+    product_name: productName,
+    category: readString(value.category),
+    kitchen_station: parseKitchenStation(value.kitchen_station),
+    price,
+    modifier_total: readNumber(value.modifier_total),
+    quantity,
+    notes: readString(value.notes),
+    round_number: readNumber(value.round_number),
+    status: parseKitchenItemStatus(value.status),
+  };
+};
+
+const parseMenuCategoryRow = (value: unknown): SupabaseMenuCategoryRow | null => {
+  if (!isRecord(value)) return null;
+  const id = readString(value.id);
+  const name = readString(value.name);
+  if (!id || !name) return null;
+  return { id, name, icon_name: readString(value.icon_name), sort_order: readNumber(value.sort_order) };
+};
+
+const parseMenuProductRow = (value: unknown): SupabaseMenuProductRow | null => {
+  if (!isRecord(value)) return null;
+  const id = readString(value.id);
+  const name = readString(value.name);
+  const price = readNumber(value.price);
+  if (!id || !name || price === undefined) return null;
+  return {
+    id,
+    name,
+    price,
+    category_id: readString(value.category_id),
+    description: readString(value.description),
+    kitchen_station: parseKitchenStation(value.kitchen_station),
+    is_custom_price: readBoolean(value.is_custom_price),
+    is_favorite: readBoolean(value.is_favorite),
+    favorite_order: readNumber(value.favorite_order),
+    modifier_groups: value.modifier_groups,
+  };
+};
+
 /**
  * Carga el estado actual de todas las mesas desde Supabase
  */
@@ -97,10 +264,12 @@ export const fetchRemoteTables = async (): Promise<Record<string, { status: Tabl
     }
 
     const map: Record<string, { status: TableStatus; lastUpdated?: string }> = {};
-    data?.forEach((row: any) => {
-      map[row.table_number] = {
-        status: row.status as TableStatus,
-        lastUpdated: row.last_updated ? new Date(row.last_updated).toLocaleTimeString() : undefined,
+    (data || []).forEach(row => {
+      const parsedRow = parseTableStateRow(row);
+      if (!parsedRow) return;
+      map[parsedRow.table_number] = {
+        status: parsedRow.status,
+        lastUpdated: parsedRow.last_updated ? new Date(parsedRow.last_updated).toLocaleTimeString() : undefined,
       };
     });
 
@@ -133,7 +302,8 @@ export const fetchActiveOrderItems = async (tableNumber: string): Promise<{ item
       console.warn('Error fetching active order:', orderError.message);
       return null;
     }
-    if (!orderData) {
+    const activeOrder = parseOrderRow(orderData);
+    if (!activeOrder) {
       return { items: [] };
     }
 
@@ -141,7 +311,7 @@ export const fetchActiveOrderItems = async (tableNumber: string): Promise<{ item
     const { data: itemsData, error: itemsError } = await supabase
       .from('order_items')
       .select('*')
-      .eq('order_id', orderData.id)
+      .eq('order_id', activeOrder.id)
       .order('created_at', { ascending: true });
 
     if (itemsError) {
@@ -149,27 +319,30 @@ export const fetchActiveOrderItems = async (tableNumber: string): Promise<{ item
       return null;
     }
     if (!itemsData) {
-      return { items: [], orderId: orderData.id };
+      return { items: [], orderId: activeOrder.id };
     }
 
-    const items: CartItem[] = itemsData.map((row: any) => ({
-      product: {
-        id: row.product_id,
-        menuProductId: row.menu_product_id || row.product_id,
-        name: row.product_name,
-        price: Number(row.price),
-        modifierTotal: Number(row.modifier_total || 0),
-        category: row.category || 'general',
-        kitchenStation: row.kitchen_station || 'station_a',
-      },
-      quantity: row.quantity,
-      notes: row.notes || '',
-      round: row.round_number || 1,
-      status: row.status || 'pending',
-      dbId: row.id,
-    }));
+    const items: CartItem[] = itemsData.flatMap(row => {
+      const parsedRow = parseOrderItemRow(row);
+      return parsedRow ? [{
+        product: {
+          id: parsedRow.product_id,
+          menuProductId: parsedRow.menu_product_id || parsedRow.product_id,
+          name: parsedRow.product_name,
+          price: parsedRow.price,
+          modifierTotal: parsedRow.modifier_total || 0,
+          category: parsedRow.category || 'general',
+          kitchenStation: parsedRow.kitchen_station || 'station_a',
+        },
+        quantity: parsedRow.quantity,
+        notes: parsedRow.notes || '',
+        round: parsedRow.round_number || 1,
+        status: parsedRow.status || 'pending',
+        dbId: parsedRow.id,
+      }] : [];
+    });
 
-    return { items, orderId: orderData.id };
+    return { items, orderId: activeOrder.id };
   } catch (err) {
     console.warn('Error fetching order items:', err);
     return null;
@@ -200,8 +373,8 @@ export const syncActiveOrderToSupabase = async (
       .maybeSingle();
     if (existingOrderError) throw existingOrderError;
 
-    let orderId = existingOrder?.id;
-    const orderType = tableNumber.startsWith('L-') ? 'takeaway' : 'table';
+    let orderId = parseOrderRow(existingOrder)?.id;
+    const orderType = getOrderReferenceType(tableNumber);
 
     if (!orderId && items.length > 0) {
       const { data: newOrder, error: createError } = await supabase
@@ -215,8 +388,9 @@ export const syncActiveOrderToSupabase = async (
         .select('id')
         .single();
 
-      if (createError) throw createError;
-      orderId = newOrder.id;
+      const createdOrder = parseOrderRow(newOrder);
+      if (createError || !createdOrder) throw createError || new Error('Supabase no devolvió una orden válida.');
+      orderId = createdOrder.id;
     } else if (orderId) {
       const { error: updateOrderError } = await supabase
         .from('orders')
@@ -266,7 +440,7 @@ export const syncActiveOrderToSupabase = async (
       });
     if (tableError) throw tableError;
 
-    return orderId;
+    return orderId || null;
   } catch (err) {
     console.warn('Error syncing order to Supabase:', err);
     throw new Error(describeSupabaseError(err));
@@ -291,12 +465,13 @@ export const markRoundSentInSupabase = async (
       .eq('status', 'active')
       .maybeSingle();
 
-    if (!order) return false;
+    const activeOrder = parseOrderRow(order);
+    if (!activeOrder) return false;
 
     await supabase
       .from('order_items')
       .update({ status: 'sent_to_kitchen' })
-      .eq('order_id', order.id)
+      .eq('order_id', activeOrder.id)
       .eq('status', 'pending');
 
     await supabase
@@ -484,12 +659,15 @@ export const fetchMenuCategoriesFromSupabase = async (): Promise<Category[] | nu
       return null;
     }
 
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      iconName: row.icon_name,
-      sortOrder: row.sort_order,
-    }));
+    return (data || []).flatMap(row => {
+      const parsedRow = parseMenuCategoryRow(row);
+      return parsedRow ? [{
+        id: parsedRow.id,
+        name: parsedRow.name,
+        iconName: parsedRow.icon_name,
+        sortOrder: parsedRow.sort_order,
+      }] : [];
+    });
   } catch (err) {
     console.warn('Network error fetching categories from Supabase:', err);
     return null;
@@ -512,13 +690,13 @@ const normalizeModifierGroups = (value: unknown): ProductModifierGroup[] => {
 
   if (!Array.isArray(parsed)) return [];
 
-  return parsed.flatMap((group: any) => {
-    if (!group || typeof group.id !== 'string' || typeof group.label !== 'string' || !Array.isArray(group.options)) {
+  return parsed.flatMap(group => {
+    if (!isRecord(group) || typeof group.id !== 'string' || typeof group.label !== 'string' || !Array.isArray(group.options)) {
       return [];
     }
 
-    const options = group.options.flatMap((option: any) => (
-      option && typeof option.id === 'string' && typeof option.name === 'string'
+    const options = group.options.flatMap(option => (
+      isRecord(option) && typeof option.id === 'string' && typeof option.name === 'string'
         ? [{
             id: option.id,
             name: option.name,
@@ -557,19 +735,22 @@ export const fetchMenuProductsFromSupabase = async (): Promise<Product[] | null>
       return null;
     }
 
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      menuProductId: row.id,
-      name: row.name,
-      price: Number(row.price),
-      category: row.category_id || 'extras',
-      description: row.description || '',
-      kitchenStation: row.kitchen_station as any,
-      isCustomPrice: Boolean(row.is_custom_price),
-      isFavorite: Boolean(row.is_favorite),
-      favoriteOrder: Number(row.favorite_order || 0),
-      modifierGroups: normalizeModifierGroups(row.modifier_groups),
-    }));
+    return (data || []).flatMap(row => {
+      const parsedRow = parseMenuProductRow(row);
+      return parsedRow ? [{
+        id: parsedRow.id,
+        menuProductId: parsedRow.id,
+        name: parsedRow.name,
+        price: parsedRow.price,
+        category: parsedRow.category_id || 'extras',
+        description: parsedRow.description || '',
+        kitchenStation: parsedRow.kitchen_station || 'station_a',
+        isCustomPrice: Boolean(parsedRow.is_custom_price),
+        isFavorite: Boolean(parsedRow.is_favorite),
+        favoriteOrder: parsedRow.favorite_order || 0,
+        modifierGroups: normalizeModifierGroups(parsedRow.modifier_groups),
+      }] : [];
+    });
   } catch (err) {
     console.warn('Network error fetching products from Supabase:', err);
     return null;
@@ -590,6 +771,44 @@ export interface BroadcastKitchenStatusPayload {
   itemId: string;
   status: 'pending' | 'sent_to_kitchen' | 'preparing' | 'ready';
 }
+
+const isCartItem = (value: unknown): value is CartItem => {
+  if (!isRecord(value) || !isRecord(value.product)) return false;
+  const product = value.product;
+  return typeof product.id === 'string'
+    && typeof product.name === 'string'
+    && readNumber(product.price) !== undefined
+    && typeof product.category === 'string'
+    && readNumber(value.quantity) !== undefined;
+};
+
+const parseBroadcastTableStatePayload = (value: unknown): BroadcastTableStatePayload | null => {
+  if (!isRecord(value)) return null;
+  const tableNumber = readString(value.tableNumber);
+  const status = parseTableStatus(value.status);
+  const currentRound = readNumber(value.currentRound);
+  if (!tableNumber || !status || currentRound === undefined || !isRecord(value.cart)) return null;
+
+  const cart = Object.fromEntries(
+    Object.entries(value.cart).flatMap(([id, item]) => isCartItem(item) ? [[id, item]] : []),
+  );
+  return {
+    tableNumber,
+    status,
+    cart,
+    currentRound,
+    waiterName: readString(value.waiterName),
+    isBillRequested: readBoolean(value.isBillRequested),
+  };
+};
+
+const parseBroadcastKitchenStatusPayload = (value: unknown): BroadcastKitchenStatusPayload | null => {
+  if (!isRecord(value)) return null;
+  const tableNumber = readString(value.tableNumber);
+  const itemId = readString(value.itemId);
+  const status = parseKitchenItemStatus(value.status);
+  return tableNumber && itemId && status ? { tableNumber, itemId, status } : null;
+};
 
 export const reinitializeSupabaseClient = () => {
   if (realtimeChannel && supabaseClient) {
@@ -671,11 +890,11 @@ export const subscribeToRealtimeChanges = (
       'postgres_changes',
       { event: '*', schema: 'public', table: 'tables_state' },
       (payload) => {
-        const row = payload.new as any;
-        if (row && row.table_number) {
+        const row = parseTableStateRow(payload.new);
+        if (row) {
           onTableChange({
             tableNumber: row.table_number,
-            status: row.status as TableStatus,
+            status: row.status,
             lastUpdated: row.last_updated ? new Date(row.last_updated).toLocaleTimeString() : undefined,
             waiterName: row.waiter_name,
             activeOrderId: row.active_order_id,
@@ -687,8 +906,8 @@ export const subscribeToRealtimeChanges = (
       'postgres_changes',
       { event: '*', schema: 'public', table: 'order_items' },
       (payload) => {
-        const row = payload.new as any;
-        const oldRow = payload.old as any;
+        const row = parseOrderItemRow(payload.new);
+        const oldRow = parseOrderItemRow(payload.old);
         const tableNumber = row?.table_number || oldRow?.table_number;
         if (tableNumber && onOrderItemsChange) onOrderItemsChange(tableNumber);
       },
@@ -697,8 +916,8 @@ export const subscribeToRealtimeChanges = (
       'postgres_changes',
       { event: '*', schema: 'public', table: 'orders' },
       (payload) => {
-        const row = payload.new as any;
-        if (row && row.id && onOrderChange) {
+        const row = parseOrderRow(payload.new);
+        if (row && row.table_number && row.status && row.total !== undefined && onOrderChange) {
           onOrderChange({
             orderId: row.id,
             tableNumber: row.table_number,
@@ -724,13 +943,15 @@ export const subscribeToRealtimeChanges = (
       }
     )
     .on('broadcast', { event: 'TABLE_STATE_SYNC' }, ({ payload }) => {
-      if (onTableCartSync && payload) {
-        onTableCartSync(payload as BroadcastTableStatePayload);
+      const tablePayload = parseBroadcastTableStatePayload(payload);
+      if (onTableCartSync && tablePayload) {
+        onTableCartSync(tablePayload);
       }
     })
     .on('broadcast', { event: 'KITCHEN_ITEM_STATUS' }, ({ payload }) => {
-      if (onKitchenStatusSync && payload) {
-        onKitchenStatusSync(payload as BroadcastKitchenStatusPayload);
+      const kitchenPayload = parseBroadcastKitchenStatusPayload(payload);
+      if (onKitchenStatusSync && kitchenPayload) {
+        onKitchenStatusSync(kitchenPayload);
       }
     })
     .subscribe((status) => {

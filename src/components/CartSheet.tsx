@@ -23,6 +23,7 @@ import {
 import { printTicketTCP } from '../services/printerService';
 import { QuantityModal } from './QuantityModal';
 import { DigitalBillModal } from './DigitalBillModal';
+import { buildConfiguredProductId, getBaseProductId } from '../domain/products/configuredProductId';
 import { CartItem } from '../store/useCartStore';
 
 export const CartSheet: React.FC = () => {
@@ -419,10 +420,12 @@ export const CartSheet: React.FC = () => {
             const configuredProduct = customName && customName !== editingItem.product.name
               ? {
                   ...editingItem.product,
-                  id: selectedModifierOptionIds?.length
-                    ? `${editingItem.product.id.split('--')[0]}--${selectedModifierOptionIds.slice().sort().join('--')}`
-                    : editingItem.product.id,
-                  menuProductId: editingItem.product.menuProductId || editingItem.product.id.split('--')[0],
+                  id: buildConfiguredProductId({
+                    baseProductId: editingItem.product.menuProductId || getBaseProductId(editingItem.product.id),
+                    modifierOptionIds: selectedModifierOptionIds,
+                    variantIds: selectedModifierOptionIds?.length ? [] : [customName],
+                  }),
+                  menuProductId: editingItem.product.menuProductId || getBaseProductId(editingItem.product.id),
                   name: customName,
                   price: customPrice !== undefined ? customPrice : editingItem.product.price,
                   selectedModifierOptionIds,

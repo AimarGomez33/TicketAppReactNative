@@ -14,8 +14,10 @@ import {
   Product,
 } from '../store/useCartStore';
 import { printTicketTCP } from '../services/printerService';
-import { QuantityModal, hasPaidModifiers } from './QuantityModal';
+import { QuantityModal } from './QuantityModal';
 import { CustomExtraModal } from './CustomExtraModal';
+import { hasPaidModifiers } from '../domain/products/productModifiers';
+import { buildConfiguredProductId, getBaseProductId } from '../domain/products/configuredProductId';
 import {
   Search,
   Plus,
@@ -164,13 +166,14 @@ export const QuickSaleView: React.FC = () => {
         return;
       }
       if (customName && customName !== modalProduct.name) {
-        const configurationKey = selectedModifierOptionIds?.length
-          ? selectedModifierOptionIds.slice().sort().join('--')
-          : customName.toLowerCase().replace(/[^a-z0-9]/g, '-');
         const variantProduct: Product = {
           ...modalProduct,
-          id: `${modalProduct.id}--${configurationKey}`,
-          menuProductId: modalProduct.menuProductId || modalProduct.id,
+          id: buildConfiguredProductId({
+            baseProductId: modalProduct.menuProductId || getBaseProductId(modalProduct.id),
+            modifierOptionIds: selectedModifierOptionIds,
+            variantIds: selectedModifierOptionIds?.length ? [] : [customName],
+          }),
+          menuProductId: modalProduct.menuProductId || getBaseProductId(modalProduct.id),
           name: customName,
           price: customPrice !== undefined ? customPrice : modalProduct.price,
           selectedModifierOptionIds,

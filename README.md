@@ -1,97 +1,95 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Ticket App POS
 
-# Getting Started
+Aplicación React Native para operación de mesas, mostrador, cocina e impresión
+térmica. El catálogo comercial, precios, favoritos y modificadores se cargan
+desde Supabase: la aplicación no incluye platillos ni precios como respaldo.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## Arquitectura
 
-## Step 1: Start Metro
+- `src/store/useCartStore.ts`: estado y acciones de Zustand; coordina UI,
+  sincronización e impresión, sin contener reglas puras reutilizables.
+- `src/domain/orders/`: referencias de orden, totales y actualización de
+  carritos desde el catálogo remoto.
+- `src/domain/products/`: identidad determinista de productos configurados y
+  reglas de modificadores.
+- `src/services/supabaseService.ts`: validación de filas externas, persistencia
+  y Realtime de Supabase.
+- `src/services/orderSyncDebouncer.ts`: debounce independiente por referencia;
+  cambios de una mesa no cancelan los de otra.
+- `src/services/printerService.ts`: generación e impresión ESC/POS por TCP.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+Las mesas usan referencias numéricas. Los pedidos para llevar usan referencias
+`L-xxxxx`; ambos se muestran siempre con `getOrderDisplayLabel`.
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+## Desarrollo
 
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
-```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+Requiere Node 22+ y pnpm 10.
 
 ```sh
-bundle install
+pnpm install
+pnpm start
+pnpm android
 ```
 
-Then, and every time you update your native dependencies, run:
+Validación local:
 
 ```sh
-bundle exec pod install
+pnpm run typecheck
+pnpm run lint
+pnpm test --runInBand
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## Configuración de Supabase
+
+Desde la aplicación abre **Servidor** e ingresa la Project URL y la anon key.
+La URL y la anon key, que son configuración pública de cliente, se validan y
+persisten localmente con AsyncStorage para reconectar después de reiniciar la
+aplicación. No se incorporan en el repositorio ni en la APK/IPA. Una
+configuración almacenada inválida se descarta y la app continúa en modo sin
+configurar. Nunca captures ni persistas una `service_role` key, contraseñas u
+otros secretos de servidor.
+
+Ejecuta una vez `supabase_schema.sql` al crear una instalación nueva, o
+`supabase_realtime_migration.sql` para actualizar una instalación existente.
+En Supabase configura RLS de acuerdo con tu entorno; el schema incluido es una
+configuración operativa inicial, no una sustitución de controles de producción.
+
+## Compilación y despliegue Android
+
+Compilar no despliega ni sube archivos:
 
 ```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
+pnpm build:apk
+pnpm build:aab
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+Las releases requieren firma de producción. Configura estas variables antes de
+ejecutar una tarea `Release`:
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+- `ANDROID_KEYSTORE_FILE`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
 
-## Step 3: Modify your app
+La compilación release falla si falta alguna; nunca usa el keystore de debug.
 
-Now that you have successfully run the app, let's make changes!
+El despliegue es una acción independiente y explícita:
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+```sh
+pnpm deploy:device
+pnpm upload:drive
+pnpm build:drive
+```
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+`pnpm build:apk` sólo compila; `pnpm upload:drive` sólo carga el APK ya
+generado; `pnpm build:drive` encadena ambas acciones de forma explícita. Ni
+este comando ni `./gradlew assembleRelease` suben archivos automáticamente.
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+En GitHub Actions, el workflow de build Android requiere los secretos
+equivalentes y `ANDROID_KEYSTORE_BASE64`; sólo genera artefactos y no publica
+ni despliega automáticamente.
 
-## Congratulations! :tada:
+## Pruebas de regresión
 
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+Las pruebas cubren cálculos de carrito, referencias para llevar, debounce por
+orden, identidad de configuraciones, modificadores, store e impresión.

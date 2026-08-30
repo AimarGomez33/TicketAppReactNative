@@ -11,12 +11,14 @@
     "start": "react-native start",
     "test": "jest",
     "build:apk": "cd android && ./gradlew assembleRelease",
-    "build:drive": "cd android && ./gradlew assembleRelease && cd .. && bash n8nInfrastructure/uploadToN8N.sh",
+    "build:aab": "cd android && ./gradlew bundleRelease",
     "upload:drive": "bash n8nInfrastructure/uploadToN8N.sh",
+    "build:drive": "pnpm build:apk && pnpm upload:drive",
     "install:apk": "adb install -r android/app/build/outputs/apk/release/app-release.apk",
-    "deploy": "cd android && ./gradlew assembleRelease && cd .. && adb install -r android/app/build/outputs/apk/release/app-release.apk"
+    "deploy:device": "adb install -r android/app/build/outputs/apk/release/app-release.apk"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^3.1.1",
     "@react-native/new-app-screen": "0.86.2",
     "@supabase/supabase-js": "^2.112.3",
     "buffer": "^6.0.3",

@@ -220,7 +220,7 @@ const executeSocketTransmission = (
   port: number,
 ): Promise<boolean> => {
   return new Promise((resolve, reject) => {
-    let client: any = null;
+    let client: ReturnType<typeof TcpSocket.createConnection> | null = null;
     let isSettled = false;
 
     const cleanup = () => {
@@ -241,7 +241,7 @@ const executeSocketTransmission = (
       }
     };
 
-    const finishError = (err: any) => {
+    const finishError = (err: unknown) => {
       if (!isSettled) {
         isSettled = true;
         cleanup();
@@ -252,8 +252,13 @@ const executeSocketTransmission = (
     try {
       client = TcpSocket.createConnection({ host, port }, () => {
         try {
+          const activeClient = client;
+          if (!activeClient) {
+            finishError(new Error('La conexión con la impresora se cerró antes de escribir.'));
+            return;
+          }
           const buffer = Buffer.from(payload);
-          client.write(buffer, (err?: any) => {
+          activeClient.write(buffer, undefined, (err?: Error) => {
             if (err) {
               finishError(err);
               return;
@@ -271,7 +276,7 @@ const executeSocketTransmission = (
         finishError(new Error(`Timeout: Impresora en ${host}:${port} no respondió.`));
       });
 
-      client.on('error', (err: any) => {
+      client.on('error', (err: Error) => {
         finishError(err);
       });
 

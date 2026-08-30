@@ -12,8 +12,18 @@ import {
   Platform,
   Keyboard,
 } from 'react-native';
-import { Product, ProductModifierGroup, ProductModifierOption } from '../store/useCartStore';
+import { Product } from '../store/useCartStore';
 import { X, Plus, Minus, Check } from 'lucide-react-native';
+import {
+  buildConfiguredProductName,
+  calculateEffectiveProductPrice,
+  getAvailableModifierOptionIds,
+  getBaseProductPrice,
+  getDefaultModifierOptionIds,
+  getSelectedModifierOptions,
+  getVisibleModifierGroups,
+  toggleModifierOptionSelection,
+} from '../domain/products/productModifiers';
 
 interface Props {
   visible: boolean;
@@ -33,26 +43,6 @@ interface Props {
 }
 
 const PRESET_ADD_AMOUNTS = [5, 10, 20, 30, 40, 50];
-
-export const hasPaidModifiers = (product: Product): boolean => Boolean(
-  product.modifierGroups?.some(group =>
-    group.options.some(option => (option.priceDelta || 0) !== 0),
-  ),
-);
-
-const getVisibleModifierGroups = (
-  product: Product,
-  showBaseModifiers: boolean,
-): ProductModifierGroup[] => {
-  if (showBaseModifiers) return product.modifierGroups || [];
-
-  return (product.modifierGroups || []).flatMap(group => {
-    const paidOptions = group.options.filter(option => (option.priceDelta || 0) !== 0);
-    return paidOptions.length > 0
-      ? [{ ...group, minSelections: 0, maxSelections: 1, options: paidOptions }]
-      : [];
-  });
-};
 
 export const QuantityModal: React.FC<Props> = ({
   visible,
@@ -108,15 +98,11 @@ export const QuantityModal: React.FC<Props> = ({
       } else {
         setSelectedVariantsList([]);
       }
-      const availableOptionIds = new Set(
-        getVisibleModifierGroups(product, showBaseModifiers)
-          .flatMap(group => group.options.map(option => option.id)),
-      );
+      const visibleGroups = getVisibleModifierGroups(product, showBaseModifiers);
+      const availableOptionIds = getAvailableModifierOptionIds(visibleGroups);
       const existingSelection = (product.selectedModifierOptionIds || [])
         .filter(optionId => availableOptionIds.has(optionId));
-      const defaults = getVisibleModifierGroups(product, showBaseModifiers).flatMap(group => (
-        group.options.slice(0, group.minSelections || 0).map(option => option.id)
-      ));
+      const defaults = getDefaultModifierOptionIds(visibleGroups);
       setSelectedModifierOptionIds(existingSelection.length > 0 ? existingSelection : defaults);
     }
   }, [visible, currentQuantity, currentNotes, product, showBaseModifiers]);
@@ -130,24 +116,16 @@ export const QuantityModal: React.FC<Props> = ({
   const parsedCustomPrice = parseFloat(customPriceStr);
   const basePrice = isCustomPriceMode
     ? isNaN(parsedCustomPrice) ? 0 : parsedCustomPrice
-    : product.price - (product.modifierTotal || 0);
-  const selectedModifierOptions = modifierGroups.flatMap(group =>
-    group.options.filter(option => selectedModifierOptionIds.includes(option.id)),
+    : getBaseProductPrice(product.price, product.modifierTotal);
+  const selectedModifierOptions = getSelectedModifierOptions(modifierGroups, selectedModifierOptionIds);
+  const effectivePrice = calculateEffectiveProductPrice(basePrice, selectedModifierOptions);
+  const displayName = buildConfiguredProductName(
+    product.name,
+    selectedVariantsList,
+    selectedModifierOptions,
+    isCustomPriceMode,
+    customName,
   );
-  const modifiersPrice = selectedModifierOptions.reduce(
-    (sum, option) => sum + (option.priceDelta || 0),
-    0,
-  );
-  const effectivePrice = basePrice + modifiersPrice;
-
-  const variantsSummary = [
-    ...selectedVariantsList,
-    ...selectedModifierOptions.map(option => option.name),
-  ].join(' / ');
-
-  const displayName = variantsSummary
-    ? `${product.name} (${variantsSummary})`
-    : (isCustomPriceMode ? (customName || 'Extra Personalizado') : product.name);
 
   const handleQuickAdd = (amount: number) => {
     setQuantity(prev => prev + amount);
@@ -185,42 +163,15 @@ export const QuantityModal: React.FC<Props> = ({
     setNewVariantInput('');
   };
 
-  const toggleModifierOption = (group: ProductModifierGroup, option: ProductModifierOption) => {
-    const selectedInGroup = group.options
-      .filter(candidate => selectedModifierOptionIds.includes(candidate.id))
-      .map(candidate => candidate.id);
-    const isSelected = selectedInGroup.includes(option.id);
-    const minSelections = group.minSelections || 0;
-    const maxSelections = Math.max(1, group.maxSelections || 1);
-
-    if (isSelected) {
-      if (selectedInGroup.length <= minSelections) return;
-      setSelectedModifierOptionIds(current => current.filter(optionId => optionId !== option.id));
-      return;
-    }
-
-    setSelectedModifierOptionIds(current => {
-      const withoutGroup = current.filter(optionId => !group.options.some(candidate => candidate.id === optionId));
-      const nextForGroup = maxSelections === 1
-        ? [option.id]
-        : [...selectedInGroup.slice(-(maxSelections - 1)), option.id];
-      return [...withoutGroup, ...nextForGroup];
-    });
-  };
-
   const handleConfirm = () => {
     const finalNotes = notes.trim();
-
-    const finalVariantName = variantsSummary
-      ? `${product.name} (${variantsSummary})`
-      : undefined;
 
     const hasConfiguration = selectedVariantsList.length > 0 || selectedModifierOptions.length > 0;
     onConfirm(
       Math.max(1, quantity),
       finalNotes,
       isCustomPriceMode || hasConfiguration ? effectivePrice : undefined,
-      finalVariantName || (isCustomPriceMode ? customName.trim() : undefined),
+      hasConfiguration ? displayName : (isCustomPriceMode ? customName.trim() : undefined),
       selectedModifierOptions.map(option => option.id),
     );
     onClose();
@@ -280,7 +231,9 @@ export const QuantityModal: React.FC<Props> = ({
                           style={isOptionalSingleChoice
                             ? [styles.modifierCheckbox, isSelected && styles.modifierCheckboxActive]
                             : [styles.variantChip, isSelected && styles.variantChipActive]}
-                          onPress={() => toggleModifierOption(group, option)}
+                            onPress={() => setSelectedModifierOptionIds(current =>
+                              toggleModifierOptionSelection(current, group, option),
+                            )}
                           activeOpacity={0.7}
                         >
                           {isSelected && <Check size={13} color="#ffffff" style={styles.variantCheckIcon} />}

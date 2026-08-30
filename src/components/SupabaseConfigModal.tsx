@@ -13,9 +13,12 @@ import {
   Keyboard,
 } from 'react-native';
 import { Database, X, Check, Globe, KeyRound, Radio } from 'lucide-react-native';
-import { SUPABASE_CONFIG } from '../config/supabaseConfig';
 import { useCartStore } from '../store/useCartStore';
 import { reinitializeSupabaseClient } from '../services/supabaseService';
+import {
+  getCurrentSupabaseRuntimeConfiguration,
+  saveSupabaseRuntimeConfiguration,
+} from '../services/runtimeSupabaseConfigService';
 
 interface Props {
   visible: boolean;
@@ -28,14 +31,15 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
   const showCustomAlert = useCartStore(state => state.showCustomAlert);
   const initRealtimeSync = useCartStore(state => state.initRealtimeSync);
 
-  const [url, setUrl] = useState(SUPABASE_CONFIG.url);
-  const [anonKey, setAnonKey] = useState(SUPABASE_CONFIG.anonKey);
+  const [url, setUrl] = useState(getCurrentSupabaseRuntimeConfiguration().url);
+  const [anonKey, setAnonKey] = useState(getCurrentSupabaseRuntimeConfiguration().anonKey);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      setUrl(SUPABASE_CONFIG.url);
-      setAnonKey(SUPABASE_CONFIG.anonKey);
+      const configuration = getCurrentSupabaseRuntimeConfiguration();
+      setUrl(configuration.url);
+      setAnonKey(configuration.anonKey);
     }
   }, [visible]);
 
@@ -59,12 +63,21 @@ export const SupabaseConfigModal: React.FC<Props> = ({ visible, onClose }) => {
     };
   }, []);
 
-  const handleSave = () => {
-    SUPABASE_CONFIG.url = url.trim();
-    SUPABASE_CONFIG.anonKey = anonKey.trim();
+  const handleSave = async () => {
+    const cleanUrl = url.trim();
+    const cleanAnonKey = anonKey.trim();
+    const didSave = await saveSupabaseRuntimeConfiguration({ url: cleanUrl, anonKey: cleanAnonKey });
+    if (!didSave) {
+      showCustomAlert({
+        type: 'error',
+        title: 'Configuración inválida',
+        message: 'Ingresa una Project URL https:// válida y una anon key que se pueda guardar.',
+      });
+      return;
+    }
 
     reinitializeSupabaseClient();
-    initRealtimeSync();
+    await initRealtimeSync();
 
     showCustomAlert({
       type: 'success',
